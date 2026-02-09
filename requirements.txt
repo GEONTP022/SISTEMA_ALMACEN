@@ -1,7 +1,8 @@
 streamlit
 supabase
 pandas
-python-dotenv
-streamlit-option-menu
 plotly
 requests
+streamlit-option-menu
+reportlab
+qrcode
