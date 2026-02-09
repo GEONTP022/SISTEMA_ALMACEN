@@ -24,7 +24,7 @@ try:
     supabase = create_client(url, key)
 except: st.error("⚠️ Error Conexión DB"); st.stop()
 
-# --- 3. ESTILOS PRO (DISEÑO VIDEO + TABLA AVANZADA) ---
+# --- 3. ESTILOS PRO ---
 st.markdown("""
 <style>
     .stApp { background-color: #f1f5f9; }
@@ -117,95 +117,90 @@ def to_excel(df):
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df.to_excel(writer, index=False)
     return output.getvalue()
 
-# --- 5. MODALES DE GESTIÓN (TIPO IMAGEN) ---
-@st.dialog("Gestión de Reparación")
-def modal_gestion(t):
-    st.markdown(f"### ⚙️ Orden #{t['id']}")
+# --- 5. MODALES INTERACTIVOS (EVIDENCIAS Y GESTIÓN) ---
+@st.dialog("Gestión de Servicio")
+def modal_servicio(t):
+    st.markdown(f"### 🔧 Orden #{t['id']}")
+    c1, c2 = st.columns(2)
+    c1.info(f"Cliente: **{t['cliente_nombre']}**")
+    c2.warning(f"Saldo: **S/ {t['saldo']:.2f}**")
     
-    # Resumen Superior
-    c1, c2, c3 = st.columns(3)
-    c1.info(f"Cliente: {t['cliente_nombre']}")
-    c2.write(f"📱 **{t['marca']} {t['modelo']}**")
-    if t['saldo']>0: c3.error(f"Debe: S/ {t['saldo']}")
-    else: c3.success("Pagado")
-
-    # Pestañas de Acción
-    tab1, tab2, tab3, tab4 = st.tabs(["💰 Pagar", "📸 Evidencias", "📄 Ticket", "🚫 Anular"])
-
-    with tab1: # PAGAR
-        if t['saldo'] <= 0: st.success("✅ Orden cancelada en su totalidad.")
+    tab1, tab2, tab3, tab4 = st.tabs(["💵 Cobrar", "📸 Evidencias", "🖨️ PDF", "⚠️ Anular"])
+    
+    with tab1: # COBRAR
+        if t['saldo'] <= 0: st.success("✅ Pagado")
         else:
             monto = st.number_input("Monto a Pagar", 0.0, float(t['saldo']), float(t['saldo']))
             metodo = st.selectbox("Método", ["Efectivo", "Yape", "Tarjeta"])
             if st.button("Confirmar Pago", use_container_width=True):
-                n_acu = t['acuenta'] + monto; n_sal = t['precio'] - n_acu
+                n_acu = t['acuenta'] + monto
+                n_sal = t['precio'] - n_acu
                 est = "Entregado" if n_sal == 0 else "Pendiente"
                 supabase.table("tickets").update({"acuenta":n_acu, "saldo":n_sal, "estado":est, "metodo_pago":metodo}).eq("id", t['id']).execute()
                 st.rerun()
 
-    with tab2: # EVIDENCIAS (FOTOS)
-        c_a, c_d = st.columns(2)
-        with c_a:
-            st.caption("Antes (Ingreso)")
-            if t['foto_antes']: st.image(t['foto_antes'])
-            else: st.info("Sin foto")
-        with c_d:
-            st.caption("Después (Salida)")
-            if t['foto_despues']: st.image(t['foto_despues'])
+    with tab2: # EVIDENCIAS (REQ #12)
+        c_ant, c_des = st.columns(2)
+        with c_ant:
+            st.caption("Antes (Recepción)")
+            if t['foto_antes']: st.image(t['foto_antes'], use_container_width=True)
+            else: st.info("No hay foto")
+        with c_des:
+            st.caption("Después (Entrega)")
+            if t['foto_despues']: st.image(t['foto_despues'], use_container_width=True)
             else:
-                up = st.file_uploader("Subir foto final", key="f_up")
-                if up and st.button("Guardar Foto"):
-                    url = subir_evidencia(up)
+                f_up = st.file_uploader("Subir Foto Final", key="f_up")
+                if f_up and st.button("Guardar Evidencia"):
+                    url = subir_evidencia(f_up)
                     supabase.table("tickets").update({"foto_despues":url}).eq("id", t['id']).execute()
                     st.rerun()
 
     with tab3: # PDF
-        pdf = generar_pdf_universal("Reparacion", t['id'], {"nombre":t['cliente_nombre'], "dni":t['cliente_dni']}, [{"desc":t['marca'], "cant":1, "total":t['precio']}], {"total":t['precio'], "acuenta":t['acuenta'], "saldo":t['saldo']})
-        st.download_button("Descargar PDF", pdf, f"Ticket_{t['id']}.pdf", "application/pdf", use_container_width=True)
+        pdf = generar_pdf_universal("Reparacion", t['id'], {"nombre":t['cliente_nombre'], "dni":t['cliente_dni']}, [{"desc":t['marca']+" "+t['modelo'], "cant":1, "total":t['precio']}], {"total":t['precio'], "acuenta":t['acuenta'], "saldo":t['saldo']})
+        st.download_button("Descargar Ticket", pdf, f"Ticket_{t['id']}.pdf", "application/pdf", use_container_width=True)
 
     with tab4: # ANULAR
-        st.warning("¿Seguro de anular? El dinero se restará de la caja.")
-        if st.button("CONFIRMAR ANULACIÓN", type="primary"):
-            supabase.table("tickets").update({"estado":"Anulado", "saldo":0}).eq("id", t['id']).execute()
+        if st.button("ANULAR ORDEN", type="primary"):
+            supabase.table("tickets").update({"estado":"Anulado"}).eq("id", t['id']).execute()
             st.rerun()
 
-# --- 6. BARRA LATERAL ---
+# --- 6. MENU LATERAL ---
 with st.sidebar:
-    # LOGO (Si existe el archivo, lo muestra)
-    if os.path.exists("Logo-Mockup.jpg"):
-        st.image("Logo-Mockup.jpg", width=180)
-    else:
-        st.image("https://cdn-icons-png.flaticon.com/512/900/900782.png", width=60)
-        st.markdown("### VillaFix OS")
-
-    # SELECCIÓN DE USUARIO (REQ #6)
+    if os.path.exists("Logo-Mockup.jpg"): st.image("Logo-Mockup.jpg", width=180)
+    else: st.title("VillaFix ERP")
+    
+    # REQ #6: USUARIOS
     try: users = [u['nombre'] for u in supabase.table("usuarios").select("nombre").execute().data]
     except: users = ["Admin"]
-    st.session_state.user = st.selectbox("Usuario Activo", users)
-
+    st.session_state.user = st.selectbox("Usuario", users)
+    
     menu = option_menu(None, ["Dashboard", "Recepción", "Ventas (POS)", "Cotizaciones", "Logística", "Clientes"], 
         icons=["speedometer2", "tools", "cart4", "file-text", "truck", "people"], default_index=1,
         styles={"nav-link-selected": {"background-color": "#2563EB"}})
 
 # --- 7. MÓDULOS ---
 
-# === DASHBOARD ===
+# ==========================================
+# 1. DASHBOARD (REQ #3, #4)
+# ==========================================
 if menu == "Dashboard":
-    st.markdown("### 📊 Tablero de Comando")
+    st.markdown("### 📊 Panel de Control")
     c1, c2, c3, c4 = st.columns(4)
     
-    # Datos Reales
     hoy = datetime.now().strftime('%Y-%m-%d')
     try:
         ventas = pd.DataFrame(supabase.table("ventas").select("*").execute().data)
         tickets = pd.DataFrame(supabase.table("tickets").select("*").execute().data)
     except: ventas = pd.DataFrame(); tickets = pd.DataFrame()
     
-    # Cálculos
-    pos_hoy = ventas[ventas['fecha_venta'].str.startswith(hoy)]['total'].sum() if not ventas.empty else 0
-    taller_hoy = 0
+    pos_hoy = 0.0
+    if not ventas.empty:
+        pos_hoy = ventas[ventas['fecha_venta'].str.startswith(hoy)]['total'].sum()
+        
+    taller_hoy = 0.0
+    pendientes = 0
     if not tickets.empty:
-        # Sumar adelantos de pendientes + total de entregados HOY
+        pendientes = len(tickets[tickets['estado'] == 'Pendiente'])
         t_hoy = tickets[tickets['created_at'].str.startswith(hoy)]
         for _, t in t_hoy.iterrows():
             if t['estado'] == 'Entregado': taller_hoy += t['precio']
@@ -214,26 +209,28 @@ if menu == "Dashboard":
     c1.markdown(f'<div class="kpi-card"><div class="kpi-val">S/ {pos_hoy:.2f}</div><div class="kpi-lbl">Ventas Hoy</div></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="kpi-card"><div class="kpi-val">S/ {taller_hoy:.2f}</div><div class="kpi-lbl">Taller Hoy</div></div>', unsafe_allow_html=True)
     c3.markdown(f'<div class="kpi-card"><div class="kpi-val">S/ {pos_hoy+taller_hoy:.2f}</div><div class="kpi-lbl">Caja Total</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="kpi-card"><div class="kpi-val">{len(tickets[tickets["estado"]=="Pendiente"])}</div><div class="kpi-lbl">Pendientes</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="kpi-card"><div class="kpi-val">{pendientes}</div><div class="kpi-lbl">Pendientes</div></div>', unsafe_allow_html=True)
 
     st.divider()
     g1, g2 = st.columns(2)
     with g1:
-        st.subheader("🏆 Ventas por Vendedor")
+        st.caption("🏆 Ventas por Vendedor")
         if not ventas.empty:
             fig = px.bar(ventas.groupby('vendedor_nombre')['total'].sum().reset_index(), x='vendedor_nombre', y='total')
             st.plotly_chart(fig, use_container_width=True)
 
-# === RECEPCIÓN (EL NÚCLEO) ===
+# ==========================================
+# 2. RECEPCIÓN (REQ #9, #10, #12) - CORREGIDO
+# ==========================================
 elif menu == "Recepción":
-    t_new, t_list = st.tabs(["✨ Nueva Recepción", "📋 Lista de Reparaciones"])
+    t_form, t_list = st.tabs(["✨ Nueva Recepción", "📋 Lista de Reparaciones"])
     
-    with t_new:
-        st.markdown("#### Datos del Cliente")
+    with t_form:
+        st.markdown("#### Datos Cliente & Equipo")
         c_sel, x = st.columns([3, 1])
         try: clis = {f"{c['dni']} - {c['nombre']}": c for c in supabase.table("clientes").select("dni,nombre").execute().data}
         except: clis = {}
-        sel = c_sel.selectbox("Cliente", ["Nuevo"] + list(clis.keys()))
+        sel = c_sel.selectbox("Cliente Existente", ["Nuevo"] + list(clis.keys()))
         
         v_dni = clis[sel]['dni'] if sel != "Nuevo" else ""
         v_nom = clis[sel]['nombre'] if sel != "Nuevo" else ""
@@ -247,13 +244,12 @@ elif menu == "Recepción":
             cel = c3.text_input("Celular")
             
             # REQ #8: Cumpleaños
-            if dni:
-                c = supabase.table("clientes").select("fecha_nacimiento").eq("dni", dni).execute().data
-                if c and c[0]['fecha_nacimiento']:
-                    if datetime.strptime(c[0]['fecha_nacimiento'], '%Y-%m-%d').month == date.today().month:
+            if dni: 
+                bd = supabase.table("clientes").select("fecha_nacimiento").eq("dni", dni).execute().data
+                if bd and bd[0]['fecha_nacimiento']:
+                    if datetime.strptime(bd[0]['fecha_nacimiento'], '%Y-%m-%d').month == date.today().month:
                         st.success("🎂 ¡Cliente cumple años este mes! Ofertar descuento.")
 
-        st.markdown("#### Datos del Equipo & Evidencia")
         with st.container(border=True):
             r1, r2, r3 = st.columns(3)
             mar = r1.selectbox("Marca", ["Samsung", "Apple", "Xiaomi", "Motorola", "Otro"])
@@ -262,8 +258,7 @@ elif menu == "Recepción":
             
             r4, r5 = st.columns(2)
             falla = r4.text_area("Falla Reportada")
-            # REQ #12: Evidencia Inicial
-            foto = r5.file_uploader("📸 Foto Estado Inicial", type=['png', 'jpg'])
+            foto = r5.file_uploader("📸 Foto Recepción (Evidencia)", type=['png', 'jpg'])
             
             r6, r7, r8 = st.columns(3)
             costo = r6.number_input("Costo Total", 0.0)
@@ -282,7 +277,6 @@ elif menu == "Recepción":
             st.success("Orden Creada"); st.rerun()
 
     with t_list:
-        # BARRA HERRAMIENTAS
         with st.container():
             c_s, c_e = st.columns([4, 1])
             search = c_s.text_input("🔍 Buscar...", placeholder="Cliente, Ticket, DNI")
@@ -293,7 +287,6 @@ elif menu == "Recepción":
                 exc = to_excel(pd.DataFrame(data))
                 c_e.download_button("📗 Excel", exc, "data.xlsx", use_container_width=True)
 
-        # TABLA ESTILO VILLAFIX PRO
         st.markdown('<div class="rep-header"><div style="width:50px">⚙️</div><div style="width:100px">Estado</div><div style="flex:1">Cliente</div><div style="flex:1">Información</div><div style="flex:1">Repuestos</div><div style="flex:1;text-align:right">Montos</div><div style="flex:1;text-align:right">Fechas</div></div>', unsafe_allow_html=True)
         
         if data:
@@ -304,17 +297,22 @@ elif menu == "Recepción":
                 
                 f_ing = datetime.fromisoformat(t['created_at']).strftime("%d-%m")
                 
+                # --- CORRECCIÓN DE ERROR "INDEX ERROR" ---
+                # Validamos que el nombre exista antes de intentar cortarlo
+                nombre_cli = t['cliente_nombre'] if t['cliente_nombre'] else "Sin Nombre"
+                primer_nombre = nombre_cli.split()[0] if nombre_cli.strip() else "--"
+                
                 c_btn, c_info = st.columns([0.8, 11])
                 with c_btn:
                     st.write("")
-                    if st.button("⚙️", key=f"g_{t['id']}", help="Gestionar"): modal_gestion(t)
+                    if st.button("⚙️", key=f"g_{t['id']}", help="Gestionar"): modal_servicio(t)
                 
                 with c_info:
                     st.markdown(f"""
                     <div class="rep-row">
                         <div style="width:100px"><span class="badge {bg}">{stt}</span></div>
                         <div class="rep-col">
-                            <strong>{t['cliente_nombre'].split()[0]}</strong>
+                            <strong>{primer_nombre}</strong>
                             <small>{t['cliente_dni']}</small>
                         </div>
                         <div class="rep-col">
@@ -363,6 +361,9 @@ elif menu == "Ventas (POS)":
                     curr = supabase.table("productos").select("stock").eq("id", r['id']).execute().data[0]['stock']
                     supabase.table("productos").update({"stock":curr-r['cant']}).eq("id", r['id']).execute()
                 st.session_state.cart = []; st.success("Venta OK"); st.rerun()
+                
+            if 'last_pdf' in st.session_state:
+                st.download_button("Descargar Boleta", st.session_state.last_pdf, "Boleta.pdf")
 
 # === COTIZACIONES ===
 elif menu == "Cotizaciones":
@@ -372,7 +373,7 @@ elif menu == "Cotizaciones":
     det = st.text_area("Detalles"); tot = st.number_input("Total Cotizado", 0.0)
     if st.button("Generar PDF"):
         pdf = generar_pdf_universal("Cotizacion", "TEMP", {"nombre":cli, "dni":ruc}, [{"desc":det, "cant":1, "total":tot}], {"total":tot})
-        st.download_button("Descargar", pdf, "Cotizacion.pdf")
+        st.download_button("Descargar PDF", pdf, "Cotizacion.pdf")
 
 # === LOGÍSTICA ===
 elif menu == "Logística":
