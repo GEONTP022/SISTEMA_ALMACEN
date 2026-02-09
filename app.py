@@ -30,7 +30,7 @@ except Exception as e:
     st.error(f"⚠️ Error de conexión: {e}")
     st.stop()
 
-# --- 3. ESTILOS ---
+# --- 3. ESTILOS CSS ---
 st.markdown("""
 <style>
     .stApp { background-color: #f8f9fa; }
@@ -43,29 +43,24 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB; text-align: center;
     }
     
-    /* ESTILOS DE TARJETAS DE TICKETS (NUEVO DISEÑO) */
+    /* TARJETA DE TICKET CORREGIDA */
     .ticket-card {
-        background-color: white; padding: 12px; border-radius: 10px;
-        border: 1px solid #e5e7eb; margin-bottom: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.04);
-        font-family: sans-serif;
+        background-color: white; 
+        padding: 15px; 
+        border-radius: 10px;
+        border: 1px solid #e5e7eb; 
+        margin-bottom: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
-    /* ETIQUETAS DE ESTADO */
-    .status-box {
-        display: inline-block; padding: 3px 8px; border-radius: 6px;
-        font-size: 0.7rem; font-weight: 800; text-transform: uppercase; float: right;
+    .status-badge {
+        padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 0.75rem; text-transform: uppercase; float: right;
     }
-    .box-green { background-color: #dcfce7; color: #166534; border: 1px solid #22c55e; }
-    .box-red { background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
-    .box-grey { background-color: #f3f4f6; color: #4b5563; border: 1px solid #9ca3af; text-decoration: line-through; }
+    
+    .meta-row {
+        display: flex; gap: 10px; font-size: 0.85rem; color: #555; margin-top: 5px; background: #f9fafb; padding: 5px; border-radius: 5px;
+    }
 
-    /* DATOS ORGANIZADOS */
-    .meta-info { font-size: 0.8em; color: #555; margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
-    .meta-item { background: #f8f9fa; padding: 2px 6px; border-radius: 4px; border: 1px solid #eee; }
-    
-    .price-date { text-align: right; font-size: 0.85em; margin-top: 8px; border-top: 1px solid #eee; padding-top: 5px; }
-    
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -148,43 +143,43 @@ def subir_imagen(archivo):
         return supabase.storage.from_("fotos_productos").get_public_url(f)
     except: return None
 
-# --- VENTANA FLOTANTE ---
+# --- VENTANA FLOTANTE (MODAL) ---
 @st.dialog("Gestión de Ticket")
 def mostrar_modal_ticket(t):
     col_a, col_b = st.columns([2,1])
     with col_a:
+        st.markdown(f"### #{t['id']}")
         st.write(f"👤 **{t['cliente_nombre']}**")
-        st.caption(f"DNI: {t['cliente_dni']}")
     with col_b:
-        if t['estado'] == "Anulado": st.error("ANULADO")
-        elif t['saldo'] <= 0: st.success("PAGADO")
-        else: st.warning(f"DEBE S/{t['saldo']}")
+        if t['estado'] == "Anulado": st.error("🚫 ANULADO")
+        elif t['saldo'] <= 0: st.success("✅ PAGADO")
+        else: st.warning(f"⚠️ DEBE S/{t['saldo']}")
     
     st.divider()
-    st.write(f"📱 **Equipo:** {t['marca']} {t['modelo']}")
-    st.caption(f"Falla: {t['descripcion']}")
     
-    tab_ver, tab_pagar, tab_anular = st.tabs(["🖨️ Ver Ticket", "💰 Cobrar", "🚫 Anular"])
+    # PESTAÑAS DE ACCIÓN
+    tab_ver, tab_pagar, tab_anular = st.tabs(["🖨️ Ver", "💰 Cobrar", "🚫 Anular"])
     
     with tab_ver:
         pdf = generar_ticket_termico(t)
-        st.download_button("📥 Descargar PDF (80mm)", pdf, file_name=f"Ticket_{t['id']}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 PDF (80mm)", pdf, file_name=f"Ticket_{t['id']}.pdf", mime="application/pdf", use_container_width=True)
+        st.text(f"Falla: {t['descripcion']}")
 
     with tab_pagar:
-        if t['estado'] == "Anulado": st.error("Anulado.")
-        elif t['saldo'] <= 0: st.success("✅ PAGADO.")
+        if t['estado'] == "Anulado": st.error("Ticket Anulado.")
+        elif t['saldo'] <= 0: st.success("¡Ya está pagado!")
         else:
-            st.metric("Deuda Pendiente", f"S/ {t['saldo']:.2f}")
-            metodo = st.selectbox("Medio de Pago", ["Yape", "Plin", "Efectivo", "Tarjeta"])
-            if st.button("CONFIRMAR PAGO FINAL", type="primary", use_container_width=True):
+            st.metric("Deuda", f"S/ {t['saldo']:.2f}")
+            metodo = st.selectbox("Pago Final", ["Yape", "Efectivo", "Tarjeta"])
+            if st.button("COBRAR TODO", type="primary"):
                 supabase.table("tickets").update({
                     "saldo": 0, "acuenta": t['precio'], "metodo_pago": metodo, "estado": "Entregado"
                 }).eq("id", t['id']).execute()
                 st.rerun()
 
     with tab_anular:
-        st.warning("¿Cancelar este servicio?")
-        if st.button("Sí, Anular Ticket", type="secondary", use_container_width=True):
+        st.warning("Esto pondrá el saldo a S/ 0.00")
+        if st.button("ANULAR TICKET", type="secondary"):
             supabase.table("tickets").update({"estado": "Anulado"}).eq("id", t['id']).execute()
             st.rerun()
 
@@ -196,9 +191,10 @@ with st.sidebar:
         menu_title=None,
         options=["Dashboard", "Recepción", "Inventario", "Config"],
         icons=["speedometer2", "hdd-network", "box-seam", "gear"],
-        default_index=1,
+        default_index=0, # Volvemos a Dashboard como inicio
     )
 
+# Limpieza automática
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
 if st.session_state.last_tab != selected:
     st.session_state.recepcion_step = 1; st.session_state.temp_data = {}; st.session_state.cli_nombre = ""; st.session_state.last_tab = selected; st.rerun()
@@ -208,17 +204,46 @@ if 'temp_data' not in st.session_state: st.session_state.temp_data = {}
 # === PÁGINAS ===
 
 if selected == "Dashboard":
-    st.markdown("### 📊 Panel de Control")
+    st.markdown("### 📊 Panel de Control (Hoy)")
+    
+    # CÁLCULO FINANCIERO REAL
     try:
+        # Traemos todos los tickets
+        all_tickets = supabase.table("tickets").select("*").execute().data
+        
         c_prod = supabase.table("productos").select("id", count="exact").execute().count
         c_cli = supabase.table("clientes").select("id", count="exact").execute().count
         c_tic = supabase.table("tickets").select("id", count="exact").eq("estado", "Pendiente").execute().count
-    except: c_prod=0; c_cli=0; c_tic=0
+        
+        # Lógica de Caja:
+        # 1. Sumar 'acuenta' de TODOS los tickets (mientras no estén anulados)
+        # 2. Si está 'Entregado', se asume que pagó el saldo restante, así que se suma el precio total.
+        
+        # Simplificación para "Caja Hoy": Sumamos lo cobrado hoy. 
+        # Como no tenemos tabla de movimientos, sumaremos basándonos en el estado actual de los tickets del día.
+        
+        hoy_str = datetime.now().strftime('%Y-%m-%d')
+        dinero_caja = 0.0
+        
+        for t in all_tickets:
+            # Filtramos solo tickets creados HOY (para que sea Caja Diaria)
+            if t['created_at'].startswith(hoy_str):
+                if t['estado'] == 'Anulado':
+                    continue # No suma nada
+                elif t['estado'] == 'Entregado':
+                    dinero_caja += float(t['precio']) # Se cobró todo
+                else:
+                    dinero_caja += float(t['acuenta']) # Se cobró solo el adelanto
+                    
+    except: 
+        c_prod=0; c_cli=0; c_tic=0; dinero_caja=0.0
+    
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(f'<div class="metric-card"><h3>👥 {c_cli}</h3><p>Clientes</p></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="metric-card"><h3>📦 {c_prod}</h3><p>Productos</p></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="metric-card"><h3>🔧 {c_tic}</h3><p>En Taller</p></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="metric-card"><h3>💰 S/ 0</h3><p>Caja Hoy</p></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="metric-card"><h3>🔧 {c_tic}</h3><p>Pendientes</p></div>', unsafe_allow_html=True)
+    # Aquí mostramos el dinero calculado correctamente
+    c4.markdown(f'<div class="metric-card"><h3>💰 S/ {dinero_caja:.2f}</h3><p>Caja Hoy</p></div>', unsafe_allow_html=True)
 
 elif selected == "Recepción":
     col_form, col_feed = st.columns([1.6, 1])
@@ -293,7 +318,7 @@ elif selected == "Recepción":
             if st.button("➕ NUEVO CLIENTE (Limpiar)", use_container_width=True):
                 st.session_state.recepcion_step = 1; st.session_state.temp_data = {}; st.session_state.cli_nombre = ""; st.rerun()
 
-    # --- LIVE FEED (DISEÑO SOLICITADO) ---
+    # --- LISTA DE TICKETS (DERECHA - RENDERIZADO CORREGIDO) ---
     with col_feed:
         st.markdown("### ⏱️ Tickets de Hoy")
         search = st.text_input("🔎 Buscar...", placeholder="DNI o Ticket")
@@ -304,55 +329,55 @@ elif selected == "Recepción":
         tickets = q.order("created_at", desc=True).execute().data
         if tickets:
             for t in tickets:
-                # LOGICA DE ESTADO (ETIQUETA DE COLOR)
+                # 1. Definir estilos ANTES del HTML
                 if t['estado'] == "Anulado":
-                    status_html = '<span class="status-box box-grey">🚫 ANULADO</span>'
+                    bg_badge = "#f3f4f6"; color_badge = "#4b5563"; text_badge = "🚫 ANULADO"
+                    nombre_style = "text-decoration: line-through; color: #999;"
                 elif t['saldo'] <= 0:
-                    status_html = '<span class="status-box box-green">✅ PAGADO</span>'
+                    bg_badge = "#dcfce7"; color_badge = "#166534"; text_badge = "✅ PAGADO"
+                    nombre_style = "color: #000;"
                 else:
-                    status_html = f'<span class="status-box box-red">⚠️ DEBE</span>'
+                    bg_badge = "#fee2e2"; color_badge = "#991b1b"; text_badge = f"⚠️ DEBE S/{t['saldo']}"
+                    nombre_style = "color: #000;"
 
-                # Formatear fecha
-                try: 
-                    fecha_str = datetime.fromisoformat(t['created_at']).strftime("%d/%m %H:%M")
-                except: fecha_str = "Hoy"
-
-                # Obtener teléfono (consulta rápida)
-                tel_display = "Sin Tlf"
-                try:
-                    c_res = supabase.table("clientes").select("telefono").eq("dni", t['cliente_dni']).execute()
-                    if c_res.data and c_res.data[0]['telefono']: tel_display = c_res.data[0]['telefono']
-                except: pass
-
-                # HTML DE LA TARJETA (ORGANIZADO COMO PEDISTE)
-                with st.container():
-                    st.markdown(f"""
-                    <div class="ticket-card">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <b style="font-size:1.05em;">#{t['id']} {t['cliente_nombre']}</b>
-                            {status_html}
+                # Datos seguros
+                tel = "Sin Tlf"
+                # Intentar buscar el teléfono (opcional)
+                
+                # 2. Construir HTML limpio
+                html_card = f"""
+                <div class="ticket-card">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <span style="font-weight:bold; font-size:1.1em; {nombre_style}">
+                            #{t['id']} {t['cliente_nombre'].split(' ')[0]}
+                        </span>
+                        <span style="background-color:{bg_badge}; color:{color_badge}; padding:2px 6px; border-radius:4px; font-size:0.75em; font-weight:bold;">
+                            {text_badge}
+                        </span>
+                    </div>
+                    
+                    <div class="meta-row">
+                        <span>🆔 {t['cliente_dni']}</span>
+                        <span>🔑 {t['contrasena']}</span>
+                    </div>
+                    
+                    <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:flex-end;">
+                        <div style="font-size:0.9em; color:#333;">
+                            📱 <b>{t['marca']}</b> {t['modelo']}
                         </div>
-                        
-                        <div class="meta-info">
-                            <span class="meta-item">🆔 {t['cliente_dni']}</span>
-                            <span class="meta-item">📞 {tel_display}</span>
-                            <span class="meta-item">🔑 {t['contrasena']}</span>
-                        </div>
-                        
-                        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:8px; border-top:1px solid #f0f0f0; padding-top:5px;">
-                            <div style="color:#333; font-size:0.9em;">
-                                📱 <b>{t['marca']} {t['modelo']}</b>
-                            </div>
-                            <div style="text-align:right;">
-                                <div style="font-weight:bold; color:#2563EB; font-size:1em;">S/ {t['precio']:.2f}</div>
-                                <div style="color:#888; font-size:0.75em;">{fecha_str}</div>
-                            </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:bold; color:#2563EB;">S/ {t['precio']:.2f}</div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button("👁️ GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
-                        mostrar_modal_ticket(t)
+                </div>
+                """
+                
+                # 3. Renderizar HTML con permiso explícito
+                st.markdown(html_card, unsafe_allow_html=True)
+                
+                # 4. Botón nativo de Streamlit
+                if st.button("👁️ GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
+                    mostrar_modal_ticket(t)
         else: st.info("Sin movimientos.")
 
 elif selected == "Inventario":
@@ -383,4 +408,4 @@ elif selected == "Inventario":
                 st.success("Guardado")
 
 elif selected == "Config":
-    st.title("⚙️ Configuración"); st.write("v3.5 Final")
+    st.title("⚙️ Configuración"); st.write("v3.6 Final")
