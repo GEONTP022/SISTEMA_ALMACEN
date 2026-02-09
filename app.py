@@ -36,20 +36,17 @@ st.markdown("""
     .stApp { background-color: #f8f9fa; }
     h1, h2, h3, h4 { color: #1e293b !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
     
-    /* Inputs Estilizados */
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
         background-color: white !important; color: #1e293b !important; 
         border-radius: 8px; border: 1px solid #cbd5e1;
     }
     
-    /* Tarjetas */
     .metric-card {
         background: white; padding: 20px; border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB;
         text-align: center;
     }
     
-    /* Live Feed (Tickets) */
     .ticket-item { 
         background: white; padding: 15px; border-radius: 10px; 
         border: 1px solid #e2e8f0; margin-bottom: 10px; 
@@ -62,7 +59,6 @@ st.markdown("""
         border-radius: 12px; font-size: 0.75em; font-weight: bold; 
     }
     
-    /* Botones */
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
@@ -78,7 +74,6 @@ def generar_ticket_termico(t):
     
     margin = 5 * mm
     y = height - 10 * mm
-    printable_width = width - (2 * margin)
     
     # CABECERA
     c.setFillColor(colors.black)
@@ -219,6 +214,21 @@ with st.sidebar:
         }
     )
 
+# === SISTEMA DE LIMPIEZA AUTOMÁTICA ===
+# Detectar si el usuario cambió de pestaña
+if 'last_selected' not in st.session_state:
+    st.session_state.last_selected = selected
+
+if st.session_state.last_selected != selected:
+    # Si cambió de pestaña, borrar datos temporales
+    st.session_state.recepcion_step = 1
+    st.session_state.temp_data = {}
+    st.session_state.cli_nombre = ""
+    # Actualizar la última pestaña visitada
+    st.session_state.last_selected = selected
+    st.rerun()
+
+# Inicializar variables si no existen
 if 'recepcion_step' not in st.session_state: st.session_state.recepcion_step = 1
 if 'temp_data' not in st.session_state: st.session_state.temp_data = {}
 
@@ -290,7 +300,7 @@ elif selected == "Recepción":
                     st.session_state.recepcion_step = 2
                     st.rerun()
 
-        # === PASO 2: CAJA (CORREGIDO: DOBLE BOTÓN) ===
+        # === PASO 2: CAJA (DOBLE BOTÓN) ===
         elif st.session_state.recepcion_step == 2:
             data = st.session_state.temp_data
             st.markdown(f"### 💰 Caja: {data['nombre']}")
@@ -348,12 +358,10 @@ elif selected == "Recepción":
                 col_pagar, col_omitir = st.columns(2)
                 
                 with col_pagar:
-                    # Botón Azul
                     if st.button("💾 CONFIRMAR PAGO", type="primary", use_container_width=True):
                         guardar_ticket(acuenta, metodo)
                 
                 with col_omitir:
-                    # Botón Blanco (Omitir)
                     if st.button("⏩ OMITIR (Pagar al Recoger)", use_container_width=True):
                         guardar_ticket(0.00, "Contra-entrega")
 
@@ -361,7 +369,7 @@ elif selected == "Recepción":
                 st.session_state.recepcion_step = 1
                 st.rerun()
 
-        # === PASO 3: ÉXITO ===
+        # === PASO 3: ÉXITO Y LIMPIEZA ===
         elif st.session_state.recepcion_step == 3:
             st.success("✅ ¡Operación Exitosa!")
             st.balloons()
@@ -376,8 +384,10 @@ elif selected == "Recepción":
             )
             
             if st.button("➕ NUEVO SERVICIO", use_container_width=True):
+                # LIMPIEZA TOTAL PARA EL NUEVO CLIENTE
                 st.session_state.recepcion_step = 1
                 st.session_state.temp_data = {}
+                st.session_state.cli_nombre = ""
                 st.rerun()
 
     # --- LIVE FEED ---
