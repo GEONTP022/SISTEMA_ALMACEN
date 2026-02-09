@@ -43,12 +43,12 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB; text-align: center;
     }
     .ticket-card {
-        background-color: white; padding: 10px; border-radius: 8px;
-        border: 1px solid #e5e7eb; margin-bottom: 8px;
-        transition: all 0.2s;
+        background-color: white; padding: 15px; border-radius: 10px;
+        border: 1px solid #e2e8f0; margin-bottom: 12px;
+        transition: all 0.2s ease-in-out;
     }
-    .ticket-card:hover { border-color: #2563EB; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; }
+    .ticket-card:hover { border-color: #2563EB; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -130,45 +130,43 @@ def subir_imagen(archivo):
         return supabase.storage.from_("fotos_productos").get_public_url(f)
     except: return None
 
-# --- NUEVA FUNCIÓN: VENTANA FLOTANTE (MODAL) ---
-@st.experimental_dialog("Gestión de Ticket")
+# --- VENTANA FLOTANTE (MODAL) ---
+# Usamos st.dialog (requiere streamlit >= 1.37.0)
+@st.dialog("Gestión de Ticket")
 def mostrar_modal_ticket(t):
-    st.header(f"Orden #{t['id']}")
-    st.write(f"👤 **Cliente:** {t['cliente_nombre']}")
-    st.write(f"📱 **Equipo:** {t['marca']} {t['modelo']}")
-    if t['imei']: st.write(f"🔢 **IMEI:** {t['imei']}")
+    col_a, col_b = st.columns([2,1])
+    with col_a:
+        st.write(f"👤 **{t['cliente_nombre']}**")
+        st.caption(f"DNI: {t['cliente_dni']}")
+    with col_b:
+        st.markdown(f"## #{t['id']}")
     
     st.divider()
+    st.write(f"📱 **Equipo:** {t['marca']} {t['modelo']}")
+    st.caption(f"Falla: {t['descripcion']}")
     
-    # PESTAÑAS DENTRO DE LA VENTANA FLOTANTE
-    tab_ver, tab_pagar, tab_anular = st.tabs(["🖨️ Ver Ticket", "💰 Cobrar Deuda", "🚫 Anular"])
+    # PESTAÑAS DE ACCIÓN
+    tab_ver, tab_pagar, tab_anular = st.tabs(["🖨️ Ver Ticket", "💰 Cobrar", "🚫 Anular"])
     
     with tab_ver:
-        st.info("Descarga el comprobante para imprimir.")
         pdf = generar_ticket_termico(t)
         st.download_button("📥 Descargar PDF (80mm)", pdf, file_name=f"Ticket_{t['id']}.pdf", mime="application/pdf", use_container_width=True)
-        st.caption("Detalle de Falla:")
-        st.text(t['descripcion'])
 
     with tab_pagar:
         if t['saldo'] <= 0:
-            st.success("✅ Este ticket ya está PAGADO.")
+            st.success("✅ ¡Pagado Completo!")
         else:
-            st.metric("Saldo Pendiente", f"S/ {t['saldo']:.2f}")
-            metodo_fin = st.selectbox("Método de Pago Final", ["Yape", "Plin", "Efectivo"])
-            if st.button("CONFIRMAR PAGO TOTAL", type="primary", use_container_width=True):
+            st.metric("Deuda Pendiente", f"S/ {t['saldo']:.2f}")
+            metodo = st.selectbox("Medio de Pago", ["Yape", "Plin", "Efectivo", "Tarjeta"])
+            if st.button("CONFIRMAR PAGO FINAL", type="primary", use_container_width=True):
                 supabase.table("tickets").update({
-                    "saldo": 0, 
-                    "acuenta": t['precio'], 
-                    "metodo_pago": metodo_fin,
-                    "estado": "Entregado"
+                    "saldo": 0, "acuenta": t['precio'], "metodo_pago": metodo, "estado": "Entregado"
                 }).eq("id", t['id']).execute()
-                st.success("¡Cobro registrado!")
                 st.rerun()
 
     with tab_anular:
-        st.warning("¿Deseas anular este servicio? (Irreversible)")
-        if st.button("Confirmar Anulación", use_container_width=True):
+        st.warning("¿Cancelar este servicio?")
+        if st.button("Sí, Anular Ticket", use_container_width=True):
             supabase.table("tickets").update({"estado": "Anulado"}).eq("id", t['id']).execute()
             st.rerun()
 
@@ -181,14 +179,9 @@ with st.sidebar:
         options=["Dashboard", "Recepción", "Inventario", "Config"],
         icons=["speedometer2", "hdd-network", "box-seam", "gear"],
         default_index=1,
-        styles={
-            "container": {"padding": "0!important", "background-color": "#262b3d"},
-            "icon": {"color": "white", "font-size": "18px"}, 
-            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"0px", "color": "white"},
-            "nav-link-selected": {"background-color": "#2563EB"},
-        }
     )
 
+# Limpieza automática al cambiar pestaña
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
 if st.session_state.last_tab != selected:
     st.session_state.recepcion_step = 1
@@ -209,7 +202,6 @@ if selected == "Dashboard":
         c_cli = supabase.table("clientes").select("id", count="exact").execute().count
         c_tic = supabase.table("tickets").select("id", count="exact").eq("estado", "Pendiente").execute().count
     except: c_prod=0; c_cli=0; c_tic=0
-    
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(f'<div class="metric-card"><h3>👥 {c_cli}</h3><p>Clientes</p></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="metric-card"><h3>📦 {c_prod}</h3><p>Productos</p></div>', unsafe_allow_html=True)
@@ -217,22 +209,19 @@ if selected == "Dashboard":
     c4.markdown(f'<div class="metric-card"><h3>💰 S/ 0</h3><p>Caja Hoy</p></div>', unsafe_allow_html=True)
 
 elif selected == "Recepción":
-    col_form, col_feed = st.columns([1.6, 1]) # Un poco más de espacio al formulario
+    col_form, col_feed = st.columns([1.6, 1])
 
     with col_form:
         if st.session_state.recepcion_step == 1:
             st.markdown("### 🛠️ Nuevo Servicio")
             st.caption("Paso 1: Datos del Cliente y Equipo")
-            
             if 'cli_nombre' not in st.session_state: st.session_state.cli_nombre = ""
             
             c_dni, c_btn = st.columns([3, 1])
             dni = c_dni.text_input("DNI Cliente", placeholder="8 dígitos")
             if c_btn.button("🔍"):
                 res = supabase.table("clientes").select("nombre").eq("dni", dni).execute()
-                if res.data: 
-                    st.session_state.cli_nombre = res.data[0]["nombre"]
-                    st.toast("Cliente Frecuente")
+                if res.data: st.session_state.cli_nombre = res.data[0]["nombre"]; st.toast("Cliente Frecuente")
                 else: 
                     nom = consultar_dni_reniec(dni)
                     if nom: st.session_state.cli_nombre = nom; st.toast("RENIEC OK")
@@ -240,13 +229,13 @@ elif selected == "Recepción":
 
             nombre = st.text_input("Nombre *", value=st.session_state.cli_nombre)
             c1, c2 = st.columns(2)
-            tel = c1.text_input("Teléfono (Opcional)")
-            dir_cli = c2.text_input("Dirección (Opcional)")
+            tel = c1.text_input("Teléfono")
+            dir_cli = c2.text_input("Dirección")
             
             st.markdown("---")
             c_eq1, c_eq2 = st.columns(2)
-            marca = c_eq1.text_input("Marca *", placeholder="Ej: Samsung")
-            modelo = c_eq1.text_input("Modelo *", placeholder="Ej: A54")
+            marca = c_eq1.text_input("Marca *")
+            modelo = c_eq1.text_input("Modelo *")
             motivo = c_eq1.selectbox("Servicio", ["Reparación", "Mantenimiento", "Software", "Garantía"])
             imei = c_eq2.text_input("IMEI / Serie")
             passw = c_eq2.text_input("Contraseña *")
@@ -255,14 +244,12 @@ elif selected == "Recepción":
             fecha_ent = st.date_input("Fecha Entrega", min_value=date.today())
 
             if st.button("➡️ CONTINUAR AL PAGO", type="primary", use_container_width=True):
-                if not dni or not nombre or not marca or not modelo:
-                    st.error("❌ Faltan datos obligatorios")
+                if not dni or not nombre or not marca or not modelo: st.error("❌ Faltan datos obligatorios")
                 else:
                     st.session_state.temp_data = {
                         "dni": dni, "nombre": nombre.upper(), "tel": tel, "dir": dir_cli,
                         "marca": marca.upper(), "modelo": modelo.upper(), "imei": imei,
-                        "pass": passw, "motivo": motivo, "precio": precio, 
-                        "desc": desc, "fecha": str(fecha_ent)
+                        "pass": passw, "motivo": motivo, "precio": precio, "desc": desc, "fecha": str(fecha_ent)
                     }
                     st.session_state.recepcion_step = 2
                     st.rerun()
@@ -270,15 +257,12 @@ elif selected == "Recepción":
         elif st.session_state.recepcion_step == 2:
             data = st.session_state.temp_data
             st.markdown(f"### 💰 Caja: {data['nombre']}")
-            
             c_tot, c_pen = st.columns(2)
             c_tot.metric("Total", f"S/ {data['precio']:.2f}")
-            
             with st.container(border=True):
                 acuenta = st.number_input("Monto Adelanto", min_value=0.0, max_value=data['precio'], step=5.0)
                 saldo = data['precio'] - acuenta
                 c_pen.metric("Saldo", f"S/ {saldo:.2f}", delta_color="inverse" if saldo > 0 else "normal")
-                
                 cm, co = st.columns(2)
                 metodo = cm.selectbox("Método", ["Yape", "Plin", "Efectivo", "Tarjeta"])
                 operacion = co.text_input("N° Operación")
@@ -300,7 +284,6 @@ elif selected == "Recepción":
                             "metodo_pago": fin_met, "cod_operacion": operacion if fin_acu > 0 else "",
                             "estado": "Pendiente"
                         }).execute()
-                        
                         if res.data:
                             tid = res.data[0]['id']
                             st.session_state.updf = generar_ticket_termico({**data, "id": tid, "cliente_nombre": data['nombre'], "cliente_dni": data['dni'], "acuenta": fin_acu, "saldo": data['precio']-fin_acu, "metodo_pago": fin_met})
@@ -309,29 +292,21 @@ elif selected == "Recepción":
                             st.rerun()
                     except Exception as e: st.error(f"Error: {e}")
 
-                st.write("")
                 cp, co = st.columns(2)
                 with cp:
                     if st.button("💾 CONFIRMAR PAGO", type="primary", use_container_width=True): guardar(acuenta, metodo)
                 with co:
                     if st.button("⏩ OMITIR PAGO", use_container_width=True): guardar(0.00, "Contra-entrega")
-
-            if st.button("⬅️ Editar"):
-                st.session_state.recepcion_step = 1
-                st.rerun()
+            if st.button("⬅️ Editar"): st.session_state.recepcion_step = 1; st.rerun()
 
         elif st.session_state.recepcion_step == 3:
             st.success("✅ ¡Ticket Generado!")
             st.balloons()
             st.download_button("📥 DESCARGAR TICKET (80mm)", st.session_state.updf, f"Ticket_{st.session_state.uid}.pdf", "application/pdf", type="primary", use_container_width=True)
-            
             if st.button("➕ NUEVO CLIENTE (Limpiar)", use_container_width=True):
-                st.session_state.recepcion_step = 1
-                st.session_state.temp_data = {}
-                st.session_state.cli_nombre = ""
-                st.rerun()
+                st.session_state.recepcion_step = 1; st.session_state.temp_data = {}; st.session_state.cli_nombre = ""; st.rerun()
 
-    # --- LIVE FEED (ACTUALIZADO CON VENTANA FLOTANTE Y MÁS DATOS) ---
+    # --- LISTA DE TICKETS (DERECHA) ---
     with col_feed:
         st.markdown("### ⏱️ Tickets de Hoy")
         search = st.text_input("🔎 Buscar...", placeholder="DNI o Ticket")
@@ -342,33 +317,28 @@ elif selected == "Recepción":
         tickets = q.order("created_at", desc=True).execute().data
         if tickets:
             for t in tickets:
-                # CARTA DE TICKET
-                with st.container(border=True):
-                    # Fila 1: Info Principal
-                    c_info, c_action = st.columns([3, 1])
+                # TARJETA INTELIGENTE
+                with st.container():
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b>#{t['id']} {t['cliente_nombre'].split(' ')[0]}</b>
+                            <span style="font-size:0.8em; background:#eee; padding:2px 6px; border-radius:4px;">{t['estado']}</span>
+                        </div>
+                        <div style="color:#555; font-size:0.9em; margin:5px 0;">
+                            📱 {t['marca']} {t['modelo']}
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:{'#dc2626' if t['saldo']>0 else '#16a34a'}; font-weight:bold;">
+                                {'Debe S/' + str(t['saldo']) if t['saldo']>0 else 'PAGADO'}
+                            </span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                    with c_info:
-                        st.write(f"**#{t['id']} {t['cliente_nombre'].split(' ')[0]}**") # ID y 1er Nombre
-                        st.caption(f"📱 {t['marca']} {t['modelo']}") # Marca y Modelo
-                        
-                        # Indicador de Deuda
-                        if t['saldo'] > 0:
-                            st.markdown(f":red[Debe: S/ {t['saldo']}]")
-                        else:
-                            st.markdown(":green[**PAGADO**]")
-                        
-                        # Indicador de Teléfono (Si existe en clientes)
-                        try:
-                            res_tel = supabase.table("clientes").select("telefono").eq("dni", t['cliente_dni']).execute()
-                            if res_tel.data and res_tel.data[0]['telefono']:
-                                st.caption(f"📞 {res_tel.data[0]['telefono']}")
-                        except: pass
-
-                    with c_action:
-                        # BOTÓN ÚNICO PARA ABRIR LA VENTANA FLOTANTE
-                        if st.button("VER", key=f"v_{t['id']}", use_container_width=True):
-                            mostrar_modal_ticket(t)
-
+                    # BOTÓN DE ACCIÓN (Abre la ventana flotante)
+                    if st.button("👁️ VER / GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
+                        mostrar_modal_ticket(t)
         else: st.info("Sin movimientos.")
 
 elif selected == "Inventario":
@@ -384,10 +354,8 @@ elif selected == "Inventario":
             for i, r in enumerate(data):
                 with cols[i%3]:
                     with st.container(border=True):
-                        if r['imagen_url']:
-                            st.image(r['imagen_url'], use_container_width=True)
-                        else:
-                            st.markdown("🖼️ *Sin imagen*")
+                        if r['imagen_url']: st.image(r['imagen_url'], use_container_width=True)
+                        else: st.markdown("🖼️ *Sin imagen*")
                         st.write(f"**{r['nombre']}**")
                         st.caption(f"Stock: {r['stock']} | S/ {r['precio']}")
     with t2:
