@@ -5,4 +5,3 @@ supabase
 streamlit-option-menu
 reportlab
 qrcode
-plotly
