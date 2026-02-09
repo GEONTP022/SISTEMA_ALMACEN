@@ -6,7 +6,7 @@ from supabase import create_client
 from streamlit_option_menu import option_menu
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(
     page_title="VillaFix System",
     page_icon="🔧",
@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. CONEXIÓN A BASE DE DATOS (SUPABASE) ---
+# --- 2. CONEXIÓN A BASE DE DATOS ---
 try:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
@@ -23,110 +23,93 @@ except Exception as e:
     st.error(f"⚠️ Error de conexión: Revisa los Secrets en Streamlit Cloud. Detalle: {e}")
     st.stop()
 
-# --- 3. ESTILOS CSS PROFESIONALES (TEMA BUSINESS) ---
+# --- 3. ESTILOS CSS (TEMA BUSINESS) ---
 st.markdown("""
 <style>
-    /* Forzar fondo claro y textos oscuros (Anti-Modo Oscuro) */
+    /* Forzar fondo claro */
     .stApp { background-color: #f4f6f9; }
     h1, h2, h3, h4, h5, p, div, span, label, li { color: #212529 !important; }
     
-    /* Inputs y Botones */
+    /* Inputs Blancos (Para que se note lo que escribes) */
     .stTextInput>div>div>input { 
-        border-radius: 5px; 
-        border: 1px solid #ced4da; 
-        color: #212529 !important;
-        background-color: #ffffff !important;
-    }
-    .stSelectbox>div>div>div {
-        color: #212529 !important;
-        background-color: #ffffff !important;
+        background-color: #ffffff !important; 
+        color: #212529 !important; 
+        border: 1px solid #ced4da;
     }
     
     /* Tarjetas del Dashboard */
     .dashboard-card {
-        padding: 20px; 
-        border-radius: 10px; 
-        color: white !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
-        text-align: center; 
-        margin-bottom: 15px;
+        padding: 20px; border-radius: 10px; color: white !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 15px;
     }
-    /* Textos dentro de las tarjetas forzados a blanco */
-    .dashboard-card h3, .dashboard-card p { color: white !important; }
-    
     .card-green { background-color: #28a745; }
     .card-orange { background-color: #fd7e14; }
     .card-blue { background-color: #17a2b8; }
     .card-yellow { background-color: #ffc107; }
-    .card-yellow h3, .card-yellow p { color: #333 !important; } /* Excepción para amarillo */
-
-    /* Tarjetas de Productos */
-    .product-card {
-        background-color: white;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        border: 1px solid #dee2e6;
-        text-align: center;
-        margin-bottom: 10px;
-    }
+    .card-yellow h3, .card-yellow p { color: #333 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES DEL SISTEMA ---
+# --- 4. FUNCIONES INTELIGENTES ---
 
 def consultar_dni_reniec(dni):
-    """Consulta DNI usando tu Token Profesional"""
-    # TU TOKEN PERSONAL (El que me pasaste)
-    token = "sk_13243.XjdL5hswUxab5zQwW5mcWr2OW3VDfNkd"
+    """Prueba múltiples direcciones de API hasta que una funcione"""
+    # TU TOKEN DE DECOLECTA (Limpiamos espacios por si acaso)
+    token = "sk_13243.XjdL5hswUxab5zQwW5mcWr2OW3VDfNkd".strip()
     
-    # URL de la API v2
-    url = f"https://api.apis.net.pe/v2/reniec/dni?numero={dni}"
+    # Lista de direcciones posibles (Decolecta y ApisNet)
+    urls_posibles = [
+        f"https://api.apis.net.pe/v2/reniec/dni?numero={dni}",
+        f"https://api.decolecta.com/v1/reniec/dni?numero={dni}",
+        f"https://api.apis.net.pe/v1/dni?numero={dni}"
+    ]
     
-    # Cabeceras de seguridad
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Accept': 'application/json'
-    }
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/json'}
     
-    try:
-        response = requests.get(url, headers=headers)
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Juntar nombres y apellidos
-            nombres = data.get("nombres", "")
-            paterno = data.get("apellidoPaterno", "")
-            materno = data.get("apellidoMaterno", "")
+    # Probamos las direcciones una por una
+    for url in urls_posibles:
+        try:
+            response = requests.get(url, headers=headers, timeout=5)
             
-            nombre_completo = f"{nombres} {paterno} {materno}"
-            return nombre_completo.strip()
-        else:
-            return None
-    except Exception as e:
-        st.error(f"Error de conexión con RENIEC: {e}")
-        return None
+            if response.status_code == 200:
+                data = response.json()
+                # Unir nombres según el formato que devuelva la API
+                nombres = data.get("nombres", "")
+                paterno = data.get("apellidoPaterno", "")
+                materno = data.get("apellidoMaterno", "")
+                full_name = f"{nombres} {paterno} {materno}".strip()
+                
+                # Si viene todo junto en "nombre" (formato antiguo)
+                if not full_name and "nombre" in data:
+                    full_name = data["nombre"]
+                    
+                return full_name
+                
+            elif response.status_code == 401:
+                # Si dice no autorizado, probamos la siguiente URL
+                continue 
+                
+        except:
+            continue
+
+    # Si llegamos aquí, ninguna funcionó
+    st.error("❌ No se pudo conectar. Verifica si tu Token es válido o regeneralo en Decolecta.")
+    return None
 
 def subir_imagen(archivo):
-    """Sube imagen al Bucket 'fotos_productos' de Supabase"""
+    """Sube imagen a Supabase"""
     try:
-        # Nombre único con fecha y hora para no sobreescribir
         filename = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
         bucket = "fotos_productos"
-        
         file_bytes = archivo.getvalue()
         supabase.storage.from_(bucket).upload(filename, file_bytes, {"content-type": archivo.type})
-        
-        # Obtener URL pública
         return supabase.storage.from_(bucket).get_public_url(filename)
-    except Exception as e:
-        st.warning(f"Error subiendo imagen (Verifica que el Bucket sea público): {e}")
+    except:
         return None
 
 # --- 5. MENÚ LATERAL ---
 with st.sidebar:
     st.markdown("<h2 style='text-align: center; color: white !important;'>VillaFix 🔧</h2>", unsafe_allow_html=True)
-    st.markdown("---")
     
     selected = option_menu(
         menu_title=None,
@@ -141,234 +124,135 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#2563EB"},
         }
     )
-    st.markdown("---")
-    st.caption("© 2026 VillaFix System")
 
-# --- 6. LÓGICA DE PÁGINAS ---
+# --- 6. PÁGINAS ---
 
-# === PÁGINA: DASHBOARD ===
+# === DASHBOARD ===
 if selected == "Dashboard":
     st.markdown("### 📊 Panel de Control")
     
     try:
-        # Contadores rápidos (Consultas optimizadas)
+        # Contadores Reales
         prod_count = supabase.table("productos").select("id", count="exact").execute().count
         client_count = supabase.table("clientes").select("id", count="exact").execute().count
     except:
-        prod_count = 0
-        client_count = 0
+        prod_count = 0; client_count = 0
 
-    # Tarjetas de colores
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f'<div class="dashboard-card card-green"><h3>👥 {client_count}</h3><p>Clientes Totales</p></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="dashboard-card card-orange"><h3>📦 {prod_count}</h3><p>Productos en Stock</p></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="dashboard-card card-blue"><h3>🛒 0</h3><p>Ventas del Mes</p></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="dashboard-card card-yellow"><h3>💰 S/ 0.00</h3><p>Caja Chica</p></div>', unsafe_allow_html=True)
+    c1.markdown(f'<div class="dashboard-card card-green"><h3>👥 {client_count}</h3><p>Clientes</p></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="dashboard-card card-orange"><h3>📦 {prod_count}</h3><p>Productos</p></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="dashboard-card card-blue"><h3>🛒 0</h3><p>Ventas</p></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="dashboard-card card-yellow"><h3>💰 S/ 0</h3><p>Caja</p></div>', unsafe_allow_html=True)
 
     # Gráficos
     st.write("")
     col_g1, col_g2 = st.columns([2, 1])
-    
     try:
-        response = supabase.table("productos").select("categoria, stock").execute()
-        df = pd.DataFrame(response.data)
-        
+        df = pd.DataFrame(supabase.table("productos").select("categoria, stock").execute().data)
         if not df.empty:
             with col_g1:
                 st.subheader("Stock por Categoría")
-                fig = px.bar(df, x='categoria', y='stock', color='categoria', template="plotly_white")
-                fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(px.bar(df, x='categoria', y='stock', color='categoria'), use_container_width=True)
             with col_g2:
                 st.subheader("Distribución")
-                fig2 = px.pie(df, names='categoria', values='stock', hole=0.5)
-                st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("ℹ️ Registra productos para ver las estadísticas.")
+                st.plotly_chart(px.pie(df, names='categoria', values='stock', hole=0.5), use_container_width=True)
     except:
-        st.warning("No se pudieron cargar los gráficos.")
+        st.info("Agrega productos para ver gráficos.")
 
-
-# === PÁGINA: CLIENTES ===
+# === CLIENTES (DNI INTELIGENTE) ===
 elif selected == "Clientes":
     st.markdown("### 👥 Gestión de Clientes")
     
     tab1, tab2 = st.tabs(["🆕 Nuevo Cliente", "📋 Directorio"])
     
-    # PESTAÑA 1: REGISTRAR
     with tab1:
-        st.info("💡 Escribe el DNI y presiona ENTER o Buscar para autocompletar.")
+        st.info("💡 Escribe el DNI y presiona ENTER o Buscar.")
         
-        # Estado para el nombre
         if 'nombre_cliente' not in st.session_state: st.session_state.nombre_cliente = ""
         
-        col_dni, col_btn = st.columns([3, 1])
-        with col_dni:
-            dni_input = st.text_input("DNI (8 dígitos)", max_chars=8, placeholder="Ej: 72345678")
-        with col_btn:
-            st.write("") # Espacio para alinear
-            st.write("")
-            btn_buscar = st.button("🔍 Buscar RENIEC", type="primary", use_container_width=True)
-            
-        if btn_buscar and dni_input:
-            if len(dni_input) == 8:
-                with st.spinner("Conectando con RENIEC..."):
-                    nombre_encontrado = consultar_dni_reniec(dni_input)
-                    if nombre_encontrado:
-                        st.session_state.nombre_cliente = nombre_encontrado
-                        st.success("✅ ¡Datos encontrados!")
+        c_dni, c_btn = st.columns([3, 1])
+        dni_input = c_dni.text_input("DNI", max_chars=8, placeholder="Ej: 72345678")
+        btn_buscar = c_btn.button("🔍 Buscar RENIEC", type="primary", use_container_width=True)
+        
+        # Lógica de búsqueda
+        if (btn_buscar or dni_input) and len(dni_input) == 8:
+            # Evitar buscar si ya tenemos el nombre para no gastar API
+            if st.session_state.nombre_cliente == "":
+                with st.spinner("Conectando con Decolecta..."):
+                    nombre = consultar_dni_reniec(dni_input)
+                    if nombre:
+                        st.session_state.nombre_cliente = nombre
+                        st.toast("✅ ¡Datos encontrados!", icon="🎉")
                     else:
-                        st.error("❌ DNI no encontrado o error en la API.")
-            else:
-                st.warning("El DNI debe tener 8 dígitos.")
+                        st.toast("⚠️ No se encontró. Ingresa manual.", icon="❌")
 
-        st.markdown("---")
         with st.form("form_cliente"):
             nombre = st.text_input("Nombre Completo", value=st.session_state.nombre_cliente)
-            
-            c_tel, c_email = st.columns(2)
-            telefono = c_tel.text_input("Teléfono / WhatsApp")
-            email = c_email.text_input("Correo Electrónico (Opcional)")
-            
+            telefono = st.text_input("Teléfono")
             direccion = st.text_input("Dirección")
             
             if st.form_submit_button("💾 Guardar Cliente", use_container_width=True):
                 if nombre and dni_input:
-                    datos = {
-                        "dni": dni_input, 
-                        "nombre": nombre, 
-                        "telefono": telefono, 
-                        "email": email, 
-                        "direccion": direccion
-                    }
                     try:
-                        supabase.table("clientes").insert(datos).execute()
-                        st.success(f"Cliente {nombre} registrado correctamente.")
+                        supabase.table("clientes").insert({
+                            "dni": dni_input, "nombre": nombre, 
+                            "telefono": telefono, "direccion": direccion
+                        }).execute()
+                        st.success(f"Cliente {nombre} registrado!")
                         st.session_state.nombre_cliente = "" # Limpiar
                     except Exception as e:
-                        st.error(f"Error al guardar (¿DNI duplicado?): {e}")
+                        st.error(f"Error (¿DNI duplicado?): {e}")
                 else:
-                    st.warning("El DNI y Nombre son obligatorios.")
+                    st.warning("Falta DNI o Nombre")
 
-    # PESTAÑA 2: VER CLIENTES
     with tab2:
         try:
-            response = supabase.table("clientes").select("*").order("created_at", desc=True).execute()
-            df_clientes = pd.DataFrame(response.data)
-            if not df_clientes.empty:
-                st.dataframe(
-                    df_clientes[["dni", "nombre", "telefono", "direccion"]], 
-                    use_container_width=True,
-                    hide_index=True
-                )
-            else:
-                st.info("No hay clientes registrados aún.")
-        except:
-            st.error("Error al cargar la tabla de clientes.")
+            df = pd.DataFrame(supabase.table("clientes").select("*").order("created_at", desc=True).execute().data)
+            if not df.empty:
+                st.dataframe(df[["dni", "nombre", "telefono", "direccion"]], use_container_width=True, hide_index=True)
+        except: pass
 
-
-# === PÁGINA: INVENTARIO ===
+# === INVENTARIO ===
 elif selected == "Inventario":
-    st.markdown("### 📦 Inventario & Productos")
+    st.markdown("### 📦 Inventario")
+    t_ver, t_add = st.tabs(["Ver Todo", "Nuevo Producto"])
     
-    t_ver, t_add = st.tabs(["👁️ Ver Catálogo", "➕ Agregar Producto"])
-    
-    # PESTAÑA 1: CATÁLOGO VISUAL
     with t_ver:
-        col_search, _ = st.columns([1, 1])
-        filtro = col_search.text_input("🔍 Buscar por nombre o marca...", placeholder="Ej: Pantalla iPhone")
+        filtro = st.text_input("🔍 Buscar...", placeholder="Nombre o Marca")
+        query = supabase.table("productos").select("*")
+        if filtro: query = query.ilike("nombre", f"%{filtro}%")
+        data = query.execute().data
         
-        # Consulta base
-        query = supabase.table("productos").select("*").order("created_at", desc=True)
-        
-        if filtro:
-            # Filtro simple (ajustar si se necesita más complejidad)
-            # Nota: ilike a veces requiere configuración en Supabase, usaremos lógica Python si falla
-            pass 
-        
-        response = query.execute()
-        df_prods = pd.DataFrame(response.data)
-        
-        if not df_prods.empty:
-            # Filtrado en Python para asegurar que funcione rápido
-            if filtro:
-                df_prods = df_prods[
-                    df_prods['nombre'].str.contains(filtro, case=False, na=False) | 
-                    df_prods['marca'].str.contains(filtro, case=False, na=False)
-                ]
-            
-            # Grid de 4 columnas
+        if data:
             cols = st.columns(4)
-            for i, row in df_prods.iterrows():
+            for i, row in enumerate(data):
                 with cols[i % 4]:
                     with st.container(border=True):
-                        # Imagen
-                        if row['imagen_url']:
-                            st.image(row['imagen_url'], use_container_width=True)
-                        else:
-                            st.markdown("🖼️ *Sin imagen*")
-                        
-                        # Datos
+                        if row['imagen_url']: st.image(row['imagen_url'], use_container_width=True)
                         st.markdown(f"**{row['nombre']}**")
-                        st.caption(f"{row.get('marca', 'Genérico')} | {row['categoria']}")
-                        st.markdown(f"#### S/ {row['precio']}")
-                        
-                        # Stock con color
-                        if row['stock'] < 3:
-                            st.markdown(f":red[⚠️ Stock Bajo: {row['stock']}]")
-                        else:
-                            st.markdown(f":green[Stock: {row['stock']}]")
+                        st.caption(f"{row.get('marca','')} | Stock: {row['stock']}")
+                        st.markdown(f"**S/ {row['precio']}**")
         else:
-            st.info("No hay productos registrados.")
+            st.info("Sin productos.")
 
-    # PESTAÑA 2: AGREGAR PRODUCTO
     with t_add:
-        st.markdown("#### Nuevo Artículo")
         with st.form("add_prod", clear_on_submit=True):
-            col_a, col_b = st.columns(2)
+            c1, c2 = st.columns(2)
+            nom = c1.text_input("Nombre *")
+            mar = c1.text_input("Marca")
+            cat = c1.selectbox("Categoría", ["Repuestos", "Pantallas", "Accesorios"])
+            pre = c2.number_input("Precio", min_value=0.0)
+            stk = c2.number_input("Stock", min_value=1)
+            foto = st.file_uploader("Foto")
             
-            with col_a:
-                nom = st.text_input("Nombre del Producto *")
-                mar = st.text_input("Marca / Fabricante")
-                cat = st.selectbox("Categoría", ["Repuestos", "Pantallas", "Baterías", "Accesorios", "Servicios"])
-            
-            with col_b:
-                pre = st.number_input("Precio Venta (S/)", min_value=0.0, step=0.5)
-                stk = st.number_input("Stock Inicial", min_value=1, step=1)
-                foto = st.file_uploader("Foto del Producto", type=['png', 'jpg', 'jpeg'])
-            
-            st.markdown("---")
-            if st.form_submit_button("💾 Guardar en Inventario", use_container_width=True):
+            if st.form_submit_button("💾 Guardar", use_container_width=True):
                 if nom:
-                    with st.spinner("Procesando..."):
-                        url_img = None
-                        if foto:
-                            url_img = subir_imagen(foto)
-                        
-                        datos_prod = {
-                            "nombre": nom, 
-                            "marca": mar, 
-                            "categoria": cat, 
-                            "precio": pre, 
-                            "stock": stk, 
-                            "imagen_url": url_img
-                        }
-                        try:
-                            supabase.table("productos").insert(datos_prod).execute()
-                            st.success(f"✅ ¡{nom} agregado correctamente!")
-                        except Exception as e:
-                            st.error(f"Error al guardar: {e}")
-                else:
-                    st.warning("El nombre es obligatorio.")
+                    url = subir_imagen(foto) if foto else None
+                    supabase.table("productos").insert({
+                        "nombre": nom, "marca": mar, "categoria": cat, 
+                        "precio": pre, "stock": stk, "imagen_url": url
+                    }).execute()
+                    st.success("Guardado!")
 
-
-# === PÁGINA: VENTAS (Próximamente) ===
 elif selected == "Ventas":
-    st.title("🛒 Punto de Venta")
-    st.info("🚧 Módulo de Facturación en construcción...")
-    st.markdown("""
-    Aquí podrás:
-    1. Seleccionar un Cliente (Buscador DNI).
-    2. Agregar Productos al carrito.
-    3. Generar el Total y descontar Stock automáticamente.
-    """)
+    st.info("Módulo de ventas en construcción...")
