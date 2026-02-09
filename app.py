@@ -42,15 +42,9 @@ st.markdown("""
         background: white; padding: 20px; border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB; text-align: center;
     }
-    .ticket-item { 
-        background: white; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; transition: transform 0.2s;
-    }
-    .ticket-item:hover { transform: scale(1.02); border-color: #2563EB; }
-    .status-badge { background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; }
+    /* Estilo para los botones pequeños del feed */
+    .small-btn { padding: 0px 5px; font-size: 0.8em; }
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; }
-    
-    /* Estilo Imágenes Inventario */
-    .prod-img { border-radius: 8px; width: 100%; height: 150px; object-fit: cover; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -127,14 +121,53 @@ def consultar_dni_reniec(dni):
 
 def subir_imagen(archivo):
     try:
-        # Nombre único
         f = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-        # Subir
         supabase.storage.from_("fotos_productos").upload(f, archivo.getvalue(), {"content-type": archivo.type})
-        # Obtener URL Pública
         return supabase.storage.from_("fotos_productos").get_public_url(f)
-    except Exception as e:
-        return None
+    except: return None
+
+# --- FUNCIONES DE VENTANAS FLOTANTES (MODALES) ---
+@st.experimental_dialog("Gestión de Ticket")
+def ventana_gestion(ticket_data):
+    st.markdown(f"### 🎟️ Orden #{ticket_data['id']}")
+    st.write(f"**Cliente:** {ticket_data['cliente_nombre']}")
+    st.write(f"**Equipo:** {ticket_data['marca']} {ticket_data['modelo']}")
+    
+    # Tabs dentro de la ventana flotante
+    tab_pagar, tab_ver, tab_anular = st.tabs(["💰 Cobrar / Entregar", "🖨️ Ver Ticket", "🚫 Anular"])
+    
+    with tab_pagar:
+        if ticket_data['saldo'] <= 0:
+            st.success("✅ Este ticket ya está pagado.")
+        else:
+            st.metric("Deuda Pendiente", f"S/ {ticket_data['saldo']:.2f}")
+            st.info("Al confirmar, el ticket pasará a estado ENTREGADO.")
+            metodo = st.selectbox("Método de Pago Final", ["Yape", "Efectivo", "Tarjeta"])
+            
+            if st.button("CONFIRMAR PAGO TOTAL Y ENTREGAR", type="primary"):
+                # Actualizar DB
+                supabase.table("tickets").update({
+                    "saldo": 0, 
+                    "acuenta": ticket_data['precio'], 
+                    "estado": "Entregado",
+                    "metodo_pago": metodo
+                }).eq("id", ticket_data['id']).execute()
+                st.success("¡Cobro registrado!")
+                st.rerun()
+
+    with tab_ver:
+        # Generar PDF al vuelo
+        pdf = generar_ticket_termico(ticket_data)
+        st.download_button("📥 Descargar PDF (80mm)", pdf, file_name=f"Ticket_{ticket_data['id']}.pdf", mime="application/pdf", use_container_width=True)
+        st.caption("Detalle de la falla:")
+        st.text(ticket_data['descripcion'])
+
+    with tab_anular:
+        st.warning("¿Seguro que deseas anular este servicio?")
+        if st.button("SÍ, ANULAR TICKET"):
+            supabase.table("tickets").update({"estado": "Anulado"}).eq("id", ticket_data['id']).execute()
+            st.error("Ticket Anulado.")
+            st.rerun()
 
 # --- 5. MENÚ ---
 with st.sidebar:
@@ -155,7 +188,6 @@ with st.sidebar:
 
 # === LIMPIEZA AUTOMÁTICA ===
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
-
 if st.session_state.last_tab != selected:
     st.session_state.recepcion_step = 1
     st.session_state.temp_data = {}
@@ -300,8 +332,9 @@ elif selected == "Recepción":
                 st.session_state.cli_nombre = ""
                 st.rerun()
 
+    # --- LIVE FEED (MEJORADO CON BOTONES) ---
     with col_feed:
-        st.markdown("### ⏱️ Hoy")
+        st.markdown("### ⏱️ Tickets de Hoy")
         search = st.text_input("🔎 Buscar...", placeholder="DNI o Ticket")
         q = supabase.table("tickets").select("*")
         if search: q = q.or_(f"cliente_dni.eq.{search},id.eq.{search if search.isdigit() else 0}")
@@ -310,16 +343,22 @@ elif selected == "Recepción":
         tickets = q.order("created_at", desc=True).execute().data
         if tickets:
             for t in tickets:
-                st.markdown(f"""
-                <div class="ticket-item">
-                    <b>#{t['id']}</b> <span class="status-badge">{t['estado']}</span><br>
-                    <span style="font-size:0.9em">👤 {t['cliente_nombre']}</span><br>
-                    <b style="color:#d9534f">Debe: S/ {t['saldo']}</b>
-                </div>""", unsafe_allow_html=True)
-                
-                res = supabase.table("clientes").select("telefono").eq("dni", t['cliente_dni']).execute()
-                tel = res.data[0]['telefono'] if res.data else ""
-                if tel: st.link_button("💬 WhatsApp", f"https://wa.me/51{tel}?text=Hola, ticket #{t['id']}", use_container_width=True)
+                # Usamos contenedores nativos para poder meter botones
+                with st.container(border=True):
+                    # Fila 1: Info básica
+                    col_info, col_status = st.columns([3, 1])
+                    with col_info:
+                        st.markdown(f"**#{t['id']} | {t['cliente_nombre'].split(' ')[0]}**")
+                        st.caption(f"{t['marca']} {t['modelo']}")
+                    with col_status:
+                        if t['saldo'] > 0:
+                            st.markdown(f":red[Debe **S/{t['saldo']}**]")
+                        else:
+                            st.markdown(":green[**Pagado**]")
+                    
+                    # Fila 2: Botón de Acción (VENTANA FLOTANTE)
+                    if st.button(f"⚙️ GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
+                        ventana_gestion(t)
         else: st.info("Sin movimientos.")
 
 elif selected == "Inventario":
@@ -352,4 +391,4 @@ elif selected == "Inventario":
                 st.success("Guardado")
 
 elif selected == "Config":
-    st.title("⚙️ Configuración"); st.write("v3.1 Final")
+    st.title("⚙️ Configuración"); st.write("v3.2 Final")
