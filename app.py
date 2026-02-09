@@ -42,12 +42,30 @@ st.markdown("""
         background: white; padding: 20px; border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB; text-align: center;
     }
+    
+    /* ESTILOS DE TARJETAS DE TICKETS (MEJORADO) */
     .ticket-card {
-        background-color: white; padding: 15px; border-radius: 10px;
-        border: 1px solid #e2e8f0; margin-bottom: 12px;
-        transition: all 0.2s ease-in-out;
+        background-color: white; padding: 12px; border-radius: 8px;
+        border: 1px solid #e5e7eb; margin-bottom: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
     }
-    .ticket-card:hover { border-color: #2563EB; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    
+    /* ETIQUETAS DE ESTADO (CUADROS) */
+    .status-box {
+        display: inline-block; padding: 4px 8px; border-radius: 6px;
+        font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+    
+    /* VERDE (Pagado) */
+    .box-green { background-color: #dcfce7; color: #166534; border: 1px solid #22c55e; }
+    
+    /* ROJO (Deuda) */
+    .box-red { background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+    
+    /* GRIS (Anulado) */
+    .box-grey { background-color: #f3f4f6; color: #4b5563; border: 1px solid #9ca3af; text-decoration: line-through; }
+
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -131,7 +149,6 @@ def subir_imagen(archivo):
     except: return None
 
 # --- VENTANA FLOTANTE (MODAL) ---
-# Usamos st.dialog (requiere streamlit >= 1.37.0)
 @st.dialog("Gestión de Ticket")
 def mostrar_modal_ticket(t):
     col_a, col_b = st.columns([2,1])
@@ -139,7 +156,13 @@ def mostrar_modal_ticket(t):
         st.write(f"👤 **{t['cliente_nombre']}**")
         st.caption(f"DNI: {t['cliente_dni']}")
     with col_b:
-        st.markdown(f"## #{t['id']}")
+        # Estado en el modal
+        if t['estado'] == "Anulado":
+            st.error("ANULADO")
+        elif t['saldo'] <= 0:
+            st.success("PAGADO")
+        else:
+            st.warning(f"DEBE S/{t['saldo']}")
     
     st.divider()
     st.write(f"📱 **Equipo:** {t['marca']} {t['modelo']}")
@@ -153,20 +176,22 @@ def mostrar_modal_ticket(t):
         st.download_button("📥 Descargar PDF (80mm)", pdf, file_name=f"Ticket_{t['id']}.pdf", mime="application/pdf", use_container_width=True)
 
     with tab_pagar:
-        if t['saldo'] <= 0:
-            st.success("✅ ¡Pagado Completo!")
+        if t['estado'] == "Anulado":
+            st.error("No se puede cobrar un ticket anulado.")
+        elif t['saldo'] <= 0:
+            st.success("✅ Este ticket ya está PAGADO.")
         else:
             st.metric("Deuda Pendiente", f"S/ {t['saldo']:.2f}")
-            metodo = st.selectbox("Medio de Pago", ["Yape", "Plin", "Efectivo", "Tarjeta"])
-            if st.button("CONFIRMAR PAGO FINAL", type="primary", use_container_width=True):
+            metodo_fin = st.selectbox("Método de Pago Final", ["Yape", "Plin", "Efectivo", "Tarjeta"])
+            if st.button("CONFIRMAR PAGO TOTAL", type="primary", use_container_width=True):
                 supabase.table("tickets").update({
-                    "saldo": 0, "acuenta": t['precio'], "metodo_pago": metodo, "estado": "Entregado"
+                    "saldo": 0, "acuenta": t['precio'], "metodo_pago": metodo_fin, "estado": "Entregado"
                 }).eq("id", t['id']).execute()
                 st.rerun()
 
     with tab_anular:
-        st.warning("¿Cancelar este servicio?")
-        if st.button("Sí, Anular Ticket", use_container_width=True):
+        st.warning("¿Cancelar este servicio? (Irreversible)")
+        if st.button("Sí, Anular Ticket", type="secondary", use_container_width=True):
             supabase.table("tickets").update({"estado": "Anulado"}).eq("id", t['id']).execute()
             st.rerun()
 
@@ -181,7 +206,7 @@ with st.sidebar:
         default_index=1,
     )
 
-# Limpieza automática al cambiar pestaña
+# Limpieza automática
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
 if st.session_state.last_tab != selected:
     st.session_state.recepcion_step = 1
@@ -234,8 +259,8 @@ elif selected == "Recepción":
             
             st.markdown("---")
             c_eq1, c_eq2 = st.columns(2)
-            marca = c_eq1.text_input("Marca *")
-            modelo = c_eq1.text_input("Modelo *")
+            marca = c_eq1.text_input("Marca *", placeholder="Ej: Samsung")
+            modelo = c_eq1.text_input("Modelo *", placeholder="Ej: A54")
             motivo = c_eq1.selectbox("Servicio", ["Reparación", "Mantenimiento", "Software", "Garantía"])
             imei = c_eq2.text_input("IMEI / Serie")
             passw = c_eq2.text_input("Contraseña *")
@@ -306,7 +331,7 @@ elif selected == "Recepción":
             if st.button("➕ NUEVO CLIENTE (Limpiar)", use_container_width=True):
                 st.session_state.recepcion_step = 1; st.session_state.temp_data = {}; st.session_state.cli_nombre = ""; st.rerun()
 
-    # --- LISTA DE TICKETS (DERECHA) ---
+    # --- LISTA DE TICKETS (DERECHA - MEJORADA) ---
     with col_feed:
         st.markdown("### ⏱️ Tickets de Hoy")
         search = st.text_input("🔎 Buscar...", placeholder="DNI o Ticket")
@@ -317,26 +342,32 @@ elif selected == "Recepción":
         tickets = q.order("created_at", desc=True).execute().data
         if tickets:
             for t in tickets:
-                # TARJETA INTELIGENTE
+                # LOGICA DE ESTADO
+                if t['estado'] == "Anulado":
+                    estado_html = '<span class="status-box box-grey">🚫 ANULADO</span>'
+                    estilo_nombre = "text-decoration: line-through; color: #888;"
+                elif t['saldo'] <= 0:
+                    estado_html = '<span class="status-box box-green">✅ PAGADO</span>'
+                    estilo_nombre = "color: #000;"
+                else:
+                    estado_html = f'<span class="status-box box-red">⚠️ DEBE S/{t["saldo"]}</span>'
+                    estilo_nombre = "color: #000;"
+
+                # HTML PERSONALIZADO DE LA TARJETA
                 with st.container():
                     st.markdown(f"""
                     <div class="ticket-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <b>#{t['id']} {t['cliente_nombre'].split(' ')[0]}</b>
-                            <span style="font-size:0.8em; background:#eee; padding:2px 6px; border-radius:4px;">{t['estado']}</span>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="font-weight:bold; {estilo_nombre}">#{t['id']} {t['cliente_nombre'].split(' ')[0]}</span>
+                            {estado_html}
                         </div>
-                        <div style="color:#555; font-size:0.9em; margin:5px 0;">
-                            📱 {t['marca']} {t['modelo']}
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="color:{'#dc2626' if t['saldo']>0 else '#16a34a'}; font-weight:bold;">
-                                {'Debe S/' + str(t['saldo']) if t['saldo']>0 else 'PAGADO'}
-                            </span>
+                        <div style="font-size:0.85em; color:#555;">
+                            📱 <b>{t['marca']}</b> {t['modelo']}<br>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # BOTÓN DE ACCIÓN (Abre la ventana flotante)
+                    # BOTONES DE ACCIÓN
                     if st.button("👁️ VER / GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
                         mostrar_modal_ticket(t)
         else: st.info("Sin movimientos.")
@@ -354,8 +385,10 @@ elif selected == "Inventario":
             for i, r in enumerate(data):
                 with cols[i%3]:
                     with st.container(border=True):
-                        if r['imagen_url']: st.image(r['imagen_url'], use_container_width=True)
-                        else: st.markdown("🖼️ *Sin imagen*")
+                        if r['imagen_url']:
+                            st.image(r['imagen_url'], use_container_width=True)
+                        else:
+                            st.markdown("🖼️ *Sin imagen*")
                         st.write(f"**{r['nombre']}**")
                         st.caption(f"Stock: {r['stock']} | S/ {r['precio']}")
     with t2:
@@ -369,4 +402,4 @@ elif selected == "Inventario":
                 st.success("Guardado")
 
 elif selected == "Config":
-    st.title("⚙️ Configuración"); st.write("v3.3 Final")
+    st.title("⚙️ Configuración"); st.write("v3.4 Final")
