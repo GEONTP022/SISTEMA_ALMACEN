@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import requests
 from supabase import create_client
 from streamlit_option_menu import option_menu
@@ -13,12 +12,12 @@ import qrcode
 import tempfile
 import os
 
-# --- 1. CONFIGURACIÓN INICIAL ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(
     page_title="VillaFix OS | Enterprise",
     page_icon="💎",
     layout="wide",
-    initial_sidebar_state="collapsed" # Menú cerrado para mas espacio
+    initial_sidebar_state="collapsed"
 )
 
 # --- 2. CONEXIÓN ---
@@ -30,169 +29,126 @@ except Exception as e:
     st.error(f"⚠️ Error de conexión: {e}")
     st.stop()
 
-# --- 3. ESTILOS CSS "PREMIUM DARK/LIGHT" ---
+# --- 3. ESTILOS CSS ---
 st.markdown("""
 <style>
     .stApp { background-color: #f8f9fa; }
-    
-    /* Títulos y Textos */
     h1, h2, h3, h4 { color: #1e293b !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
-    p, label { color: #475569 !important; font-weight: 500; }
-    
-    /* Inputs de Alta Gama */
-    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stDateInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
-        background-color: white !important;
-        color: #1e293b !important;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        padding: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        transition: all 0.2s;
+    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div {
+        background-color: white !important; color: #1e293b !important; border-radius: 8px; border: 1px solid #cbd5e1;
     }
-    .stTextInput>div>div>input:focus { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.2); }
-
-    /* Tarjetas del Dashboard y Feed */
     .metric-card {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        border-left: 5px solid #2563EB;
-        margin-bottom: 15px;
+        background: white; padding: 20px; border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB;
+        text-align: center;
     }
+    .big-money { font-size: 24px; font-weight: bold; color: #16a34a; }
+    .big-debt { font-size: 24px; font-weight: bold; color: #dc2626; }
     
-    /* Botones */
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        transition: transform 0.1s;
-    }
-    .stButton>button:active { transform: scale(0.98); }
-
-    /* Ticket Feed (Derecha) */
-    .ticket-item {
-        background-color: white;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        margin-bottom: 10px;
-        font-size: 0.9em;
-    }
-    .status-badge {
-        background-color: #dbeafe;
-        color: #1e40af;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.75em;
-        font-weight: bold;
-    }
+    /* Ticket Feed */
+    .ticket-item { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
+    .status-badge { background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES DE ALTO NIVEL ---
+# --- 4. FUNCIONES ---
 
-def generar_ticket_pdf(datos_ticket):
-    """Genera un PDF Profesional con QR en memoria"""
+def generar_ticket_pdf(t):
+    """Genera PDF con desglose financiero"""
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    # --- ENCABEZADO ---
-    c.setFillColorRGB(0.1, 0.2, 0.4) # Azul oscuro profesional
+    # Header
+    c.setFillColorRGB(0.1, 0.2, 0.4)
     c.rect(0, height - 100, width, 100, fill=1, stroke=0)
-    
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 24)
     c.drawString(30, height - 50, "VILLAFIX REPARACIONES")
     c.setFont("Helvetica", 12)
     c.drawString(30, height - 70, "Especialistas en Hardware y Software")
-    
-    c.setFont("Helvetica-Bold", 16)
-    c.drawRightString(width - 30, height - 50, f"TICKET #{datos_ticket['id']}")
+    c.drawRightString(width - 30, height - 50, f"TICKET #{t['id']}")
     c.setFont("Helvetica", 10)
     c.drawRightString(width - 30, height - 70, f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-    # --- CUERPO ---
+    # Cuerpo
     c.setFillColor(colors.black)
     y = height - 150
     
-    # Sección Cliente
+    # Cliente
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(30, y, "DATOS DEL CLIENTE")
-    c.line(30, y-5, width-30, y-5)
-    y -= 25
+    c.drawString(30, y, "CLIENTE")
+    c.line(30, y-5, width-30, y-5); y -= 20
     c.setFont("Helvetica", 10)
-    c.drawString(30, y, f"Cliente: {datos_ticket['cliente_nombre']}")
-    c.drawString(300, y, f"DNI: {datos_ticket['cliente_dni']}")
+    c.drawString(30, y, f"Nombre: {t['cliente_nombre']}")
+    c.drawString(300, y, f"DNI: {t['cliente_dni']}")
     y -= 15
-    c.drawString(30, y, f"Teléfono: {datos_ticket.get('telefono', 'No registrado')}")
+    c.drawString(30, y, f"Contacto: {t.get('telefono', '')}")
+    y -= 30
     
-    y -= 40
-    
-    # Sección Equipo
+    # Equipo
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(30, y, "DETALLES DEL SERVICIO")
-    c.line(30, y-5, width-30, y-5)
-    y -= 25
+    c.drawString(30, y, "EQUIPO")
+    c.line(30, y-5, width-30, y-5); y -= 20
     c.setFont("Helvetica", 10)
-    c.drawString(30, y, f"Equipo: {datos_ticket['marca']} {datos_ticket['modelo']}")
-    c.drawString(300, y, f"IMEI/Serie: {datos_ticket['imei']}")
+    c.drawString(30, y, f"Modelo: {t['marca']} {t['modelo']}")
+    c.drawString(300, y, f"IMEI: {t['imei']}")
     y -= 15
-    c.drawString(30, y, f"Motivo: {datos_ticket['motivo']}")
-    c.drawString(300, y, f"Contraseña: {datos_ticket['contrasena']}")
-    y -= 20
+    c.drawString(30, y, f"Motivo: {t['motivo']}")
+    c.drawString(300, y, f"Pass: {t['contrasena']}")
+    y -= 30
+    
+    # Falla
+    c.setFillColor(colors.gray)
     c.setFont("Helvetica-Oblique", 10)
-    c.drawString(30, y, f"Falla Reportada: {datos_ticket['descripcion']}")
-    
+    c.drawString(30, y, f"Detalle: {t['descripcion']}")
     y -= 40
     
-    # Sección Costos (Caja)
-    c.setStrokeColorRGB(0.9, 0.9, 0.9)
-    c.setFillColorRGB(0.95, 0.95, 0.95)
-    c.rect(30, y-40, width-60, 50, fill=1)
+    # --- ZONA FINANCIERA (La parte importante) ---
+    c.setStrokeColorRGB(0.8, 0.8, 0.8)
+    c.setFillColorRGB(0.96, 0.96, 0.96)
+    c.rect(30, y-80, width-60, 90, fill=1) # Caja gris
+    
     c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y-20, "COSTO TOTAL:")
+    c.drawRightString(width-50, y-20, f"S/ {t['precio']:.2f}")
+    
+    c.setFillColor(colors.darkgreen)
+    c.drawString(50, y-40, "A CUENTA (ADELANTO):")
+    c.drawRightString(width-50, y-40, f"- S/ {t['acuenta']:.2f}")
+    
+    c.setFillColor(colors.red)
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, y-20, "Total Estimado:")
-    c.drawRightString(width - 50, y-20, f"S/ {datos_ticket['precio']:.2f}")
+    c.drawString(50, y-70, "SALDO PENDIENTE:")
+    c.drawRightString(width-50, y-70, f"S/ {t['saldo']:.2f}")
     
+    # Info Pago
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 9)
     y -= 100
+    pago_info = f"Método: {t['metodo_pago']}"
+    if t['cod_operacion']: pago_info += f" | Op: {t['cod_operacion']}"
+    c.drawString(50, y+15, pago_info)
     
-    # --- GENERAR QR (El toque caro) ---
-    qr_data = f"VILLAFIX | Ticket: {datos_ticket['id']} | Estado: {datos_ticket['estado']}"
-    qr = qrcode.make(qr_data)
-    
-    # Guardar QR temporalmente
+    y -= 50
+    # QR
+    qr = qrcode.make(f"TICKET-{t['id']}|SALDO:{t['saldo']}")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
         qr.save(tmp.name)
-        c.drawImage(tmp.name, width - 130, y - 50, width=100, height=100)
-        os.unlink(tmp.name) # Borrar archivo temporal
+        c.drawImage(tmp.name, width-130, y-60, 90, 90)
+        os.unlink(tmp.name)
 
-    # --- LEGAL / TÉRMINOS ---
-    c.setFont("Helvetica", 7)
-    terms = [
-        "TÉRMINOS Y CONDICIONES:",
-        "1. La empresa no se hace responsable por equipos no recogidos después de 30 días.",
-        "2. La garantía solo cubre la mano de obra y repuestos cambiados.",
-        "3. No nos hacemos responsables por pérdida de información. Se recomienda backup.",
-        "4. Equipos mojados o golpeados no tienen garantía posterior."
-    ]
-    text_y = 100
-    for line in terms:
-        c.drawString(30, text_y, line)
-        text_y -= 10
-        
-    c.line(30, 50, 200, 50)
-    c.drawString(30, 40, "Firma del Cliente")
+    # Footer
+    c.setFont("Helvetica", 8)
+    c.drawString(30, 50, "Gracias por su preferencia. Garantía válida solo con este ticket.")
     
-    c.showPage()
     c.save()
     buffer.seek(0)
     return buffer
 
 def consultar_dni_reniec(dni):
-    """Estrategia Híbrida de Búsqueda"""
+    """Búsqueda Híbrida"""
     token = "sk_13243.XjdL5hswUxab5zQwW5mcWr2OW3VDfNkd" 
     fuentes = [
         {"url": f"https://api.apis.net.pe/v2/reniec/dni?numero={dni}", "headers": {'Authorization': f'Bearer {token}'}, "tipo": "v2"},
@@ -208,231 +164,183 @@ def consultar_dni_reniec(dni):
         except: continue
     return None
 
-def subir_imagen(archivo):
-    try:
-        f = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-        supabase.storage.from_("fotos_productos").upload(f, archivo.getvalue(), {"content-type": archivo.type})
-        return supabase.storage.from_("fotos_productos").get_public_url(f)
-    except: return None
-
-# --- 5. INTERFAZ PRINCIPAL ---
-
-# Sidebar Moderno
+# --- 5. APP PRINCIPAL ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/6024/6024190.png", width=50)
     st.markdown("### VillaFix OS")
     selected = option_menu(
         menu_title=None,
-        options=["Recepción", "Inventario", "Caja & Ventas", "Configuración"],
-        icons=["hdd-network", "box-seam", "wallet2", "sliders"],
+        options=["Recepción", "Inventario", "Caja", "Config"],
+        icons=["hdd-network", "box-seam", "wallet2", "gear"],
         default_index=0,
     )
-    st.info("🟢 Sistema Online v2.5")
 
-# --- LÓGICA POR PÁGINA ---
+# --- ESTADO DE FLUJO (STEP) ---
+if 'recepcion_step' not in st.session_state: st.session_state.recepcion_step = 1 # 1: Datos, 2: Pago, 3: Ticket
+if 'temp_data' not in st.session_state: st.session_state.temp_data = {}
 
 if selected == "Recepción":
-    # DISEÑO DE DOS COLUMNAS (60% Formulario, 40% Live Feed)
-    col_form, col_feed = st.columns([1.5, 1])
-    
-    # --- COLUMNA IZQUIERDA: FORMULARIO DE INGRESO ---
-    with col_form:
-        st.markdown("### 🛠️ Nueva Recepción")
-        st.caption("Complete los datos para generar la Orden de Servicio.")
-        
-        # Estado del Cliente
-        if 'cli_nombre' not in st.session_state: st.session_state.cli_nombre = ""
-        if 'cli_dni' not in st.session_state: st.session_state.cli_dni = ""
+    col_izq, col_der = st.columns([1.5, 1])
 
-        # 1. Búsqueda Rápida
-        c_dni, c_search, c_clean = st.columns([3, 1, 0.5])
-        dni = c_dni.text_input("DNI Cliente", value=st.session_state.cli_dni, placeholder="Ingrese DNI")
-        
-        if c_search.button("🔍"):
-            if len(dni) == 8:
-                # BD Local
-                res = supabase.table("clientes").select("*").eq("dni", dni).execute()
-                if res.data:
-                    st.session_state.cli_nombre = res.data[0]["nombre"]
-                    st.toast("Cliente Frecuente Identificado", icon="👤")
-                else:
-                    # API
+    with col_izq:
+        # === PASO 1: DATOS (FORMULARIO) ===
+        if st.session_state.recepcion_step == 1:
+            st.markdown("### 🛠️ Nueva Recepción")
+            st.caption("Paso 1: Datos del Cliente y Equipo")
+            
+            # Variables Locales
+            if 'cli_nombre' not in st.session_state: st.session_state.cli_nombre = ""
+            
+            c_dni, c_btn = st.columns([3, 1])
+            dni = c_dni.text_input("DNI Cliente", placeholder="8 dígitos")
+            if c_btn.button("🔍"):
+                res = supabase.table("clientes").select("nombre").eq("dni", dni).execute()
+                if res.data: st.session_state.cli_nombre = res.data[0]["nombre"]; st.toast("Cliente Frecuente")
+                else: 
                     nom = consultar_dni_reniec(dni)
-                    if nom: 
-                        st.session_state.cli_nombre = nom
-                        st.toast("Datos obtenidos de RENIEC", icon="☁️")
+                    if nom: st.session_state.cli_nombre = nom; st.toast("RENIEC OK")
                     else: st.warning("No encontrado")
-                st.session_state.cli_dni = dni
-            else: st.error("DNI inválido")
+
+            nombre = st.text_input("Nombre *", value=st.session_state.cli_nombre)
+            c1, c2 = st.columns(2)
+            tel = c1.text_input("Teléfono (Opcional)")
+            dir_cli = c2.text_input("Dirección (Opcional)")
             
-        if c_clean.button("🧹"):
-            st.session_state.cli_nombre = ""; st.session_state.cli_dni = ""; st.rerun()
+            st.markdown("---")
+            c_eq1, c_eq2 = st.columns(2)
+            marca = c_eq1.text_input("Marca *")
+            modelo = c_eq1.text_input("Modelo *")
+            motivo = c_eq1.selectbox("Servicio", ["Reparación", "Mantenimiento", "Software", "Garantía"])
+            imei = c_eq2.text_input("IMEI/Serie")
+            passw = c_eq2.text_input("Contraseña *", placeholder="Patrón o Clave")
+            precio = c_eq2.number_input("Costo Total (S/)", min_value=0.0, step=5.0)
+            desc = st.text_area("Falla / Detalles *")
+            fecha_ent = st.date_input("Entrega", min_value=date.today())
 
-        # Formulario
-        nombre = st.text_input("Nombre Completo *", value=st.session_state.cli_nombre)
-        
-        c1, c2 = st.columns(2)
-        telefono = c1.text_input("WhatsApp (Opcional)")
-        direccion = c2.text_input("Dirección (Opcional)")
-        
-        st.markdown("---")
-        st.markdown("##### 📱 Datos del Equipo")
-        
-        c_eq1, c_eq2 = st.columns(2)
-        marca = c_eq1.text_input("Marca *", placeholder="Ej: Samsung")
-        modelo = c_eq1.text_input("Modelo *", placeholder="Ej: A50")
-        motivo = c_eq1.selectbox("Tipo de Servicio", ["Reparación", "Mantenimiento", "Software", "Garantía"])
-        
-        imei = c_eq2.text_input("IMEI / Serie")
-        contrasena = c_eq2.text_input("Contraseña *", placeholder="Patrón o Clave")
-        precio = c_eq2.number_input("Presupuesto (S/)", min_value=0.0, step=10.0)
-        
-        descripcion = st.text_area("Diagnóstico / Falla *", height=80, placeholder="Describa el problema...")
-        
-        fecha_entrega = st.date_input("Fecha Entrega Aprox.", min_value=date.today())
-
-        # Botón Guardar
-        if st.button("💾 PROCESAR INGRESO", type="primary", use_container_width=True):
-            if not dni or not nombre or not marca or not modelo or not contrasena or not descripcion:
-                st.error("❌ Complete los campos obligatorios (DNI, Nombre, Marca, Modelo, Clave, Falla)")
-            else:
-                try:
-                    # Guardar Cliente (Upsert)
-                    try:
-                        supabase.table("clientes").insert({
-                            "dni": dni, "nombre": nombre.upper(), "telefono": telefono, "direccion": direccion
-                        }).execute()
-                    except: pass
-                    
-                    # Guardar Ticket
-                    data_t = {
-                        "cliente_dni": dni, "cliente_nombre": nombre.upper(),
-                        "marca": marca.upper(), "modelo": modelo.upper(),
-                        "imei": imei, "contrasena": contrasena,
-                        "descripcion": descripcion, "motivo": motivo,
-                        "precio": precio, "fecha_entrega": str(fecha_entrega),
-                        "estado": "En Taller", "created_at": datetime.now().isoformat()
+            if st.button("➡️ CONTINUAR AL PAGO", type="primary", use_container_width=True):
+                if not dni or not nombre or not marca or not modelo or not passw:
+                    st.error("Faltan datos obligatorios")
+                else:
+                    # Guardamos temporalmente en memoria
+                    st.session_state.temp_data = {
+                        "dni": dni, "nombre": nombre.upper(), "tel": tel, "dir": dir_cli,
+                        "marca": marca.upper(), "modelo": modelo.upper(), "imei": imei,
+                        "pass": passw, "motivo": motivo, "precio": precio, 
+                        "desc": desc, "fecha": str(fecha_ent)
                     }
-                    new_ticket = supabase.table("tickets").insert(data_t).execute()
-                    
-                    # Guardar ID del ticket nuevo para el PDF
-                    if new_ticket.data:
-                        t_id = new_ticket.data[0]['id']
-                        # Preparar datos para PDF
-                        pdf_data = data_t.copy()
-                        pdf_data['id'] = t_id
-                        pdf_data['telefono'] = telefono
-                        
-                        st.session_state['ultimo_pdf'] = generar_ticket_pdf(pdf_data)
-                        st.session_state['ultimo_ticket_id'] = t_id
-                        
-                        st.success(f"✅ Ticket #{t_id} Generado Correctamente")
-                        st.session_state.cli_nombre = ""; st.session_state.cli_dni = "" # Limpiar
-                        st.rerun() # Recargar para que aparezca en el feed
-                        
-                except Exception as e: st.error(f"Error crítico: {e}")
+                    st.session_state.recepcion_step = 2 # Pasamos al pago
+                    st.rerun()
 
-        # ZONA DE DESCARGA DE PDF (Aparece después de guardar)
-        if 'ultimo_pdf' in st.session_state:
-            st.success("🖨️ Ticket listo para imprimir")
-            st.download_button(
-                label=f"📥 Descargar Ticket #{st.session_state['ultimo_ticket_id']} (PDF)",
-                data=st.session_state['ultimo_pdf'],
-                file_name=f"Ticket_VillaFix_{st.session_state['ultimo_ticket_id']}.pdf",
-                mime="application/pdf",
-                type="secondary"
-            )
-
-    # --- COLUMNA DERECHA: LIVE FEED (HISTORIAL HOY) ---
-    with col_feed:
-        st.markdown("### ⏱️ Actividad de Hoy")
-        st.caption(f"Ingresos del {date.today().strftime('%d/%m/%Y')}")
-        
-        # Filtro de búsqueda global
-        search_q = st.text_input("🔎 Buscar historial antiguo...", placeholder="DNI o ID Ticket")
-        
-        # Lógica: Si busca, busca en todo. Si no, solo muestra hoy.
-        query = supabase.table("tickets").select("*")
-        
-        if search_q:
-            # Búsqueda global (Por DNI o ID)
-            if search_q.isdigit() and len(search_q) < 6: # Asumimos ID si es corto
-                query = query.eq("id", search_q)
-            else:
-                query = query.eq("cliente_dni", search_q)
-        else:
-            # Filtro solo HOY (Usamos gte = Greater Than or Equal al inicio del día)
-            today_start = datetime.now().strftime('%Y-%m-%dT00:00:00')
-            query = query.gte("created_at", today_start)
+        # === PASO 2: VENTANA DE PAGO (COBRANZA) ===
+        elif st.session_state.recepcion_step == 2:
+            data = st.session_state.temp_data
+            st.markdown(f"### 💰 Caja Rápida: {data['nombre']}")
+            st.info("Ingrese el monto a cuenta para cerrar el ticket.")
             
-        tickets = query.order("created_at", desc=True).execute().data
-        
-        if not tickets:
-            st.info("No hay movimientos recientes.")
-        else:
-            for t in tickets:
-                # CARD DE TICKET (Estilo Caro)
-                with st.container():
-                    st.markdown(f"""
-                    <div class="ticket-item">
-                        <div style="display:flex; justify-content:space-between;">
-                            <strong>#{t['id']} | {t['cliente_nombre']}</strong>
-                            <span class="status-badge">{t['estado']}</span>
-                        </div>
-                        <div style="color:#64748b; font-size:0.85em; margin-top:5px;">
-                            📱 {t['marca']} {t['modelo']}<br>
-                            🔧 {t['motivo']} - S/ {t['precio']}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Botonera de acciones
-                    ca, cb = st.columns(2)
-                    # Botón WhatsApp
-                    tel_res = supabase.table("clientes").select("telefono").eq("dni", t['cliente_dni']).execute()
-                    tel = tel_res.data[0]['telefono'] if tel_res.data else ""
-                    
-                    if tel:
-                        url_wa = f"https://wa.me/51{tel}?text=Hola {t['cliente_nombre']}, su equipo {t['marca']} (Ticket #{t['id']}) ha ingresado a VillaFix."
-                        ca.link_button("💬 WhatsApp", url_wa, use_container_width=True)
-                    else:
-                        ca.button("No Tel", disabled=True, key=f"btn_no_{t['id']}", use_container_width=True)
-                    
-                    # Botón Ver Detalles (Simulado)
-                    cb.button("👁️ Ver", key=f"ver_{t['id']}", use_container_width=True)
+            # Tarjeta de Resumen Financiero
+            c_tot, c_acu, c_res = st.columns(3)
+            c_tot.metric("Total a Pagar", f"S/ {data['precio']:.2f}")
+            
+            # Formulario de Pago
+            with st.container(border=True):
+                acuenta = st.number_input("Monto a Cuenta (Adelanto) *", min_value=0.0, max_value=data['precio'], step=5.0)
+                
+                # Cálculo dinámico del saldo
+                saldo = data['precio'] - acuenta
+                c_acu.metric("Deja a Cuenta", f"S/ {acuenta:.2f}")
+                c_res.metric("Saldo Pendiente", f"S/ {saldo:.2f}", delta_color="inverse" if saldo > 0 else "normal")
+                
+                st.write("")
+                cm, co = st.columns(2)
+                metodo = cm.selectbox("Método de Pago", ["Yape", "Plin", "Efectivo", "Tarjeta", "Transferencia"])
+                operacion = co.text_input("N° Operación (Opcional)", placeholder="Ej: 123456")
+                
+                if st.button("💾 CONFIRMAR Y GENERAR TICKET", type="primary", use_container_width=True):
+                    try:
+                        # 1. Guardar Cliente
+                        try:
+                            supabase.table("clientes").insert({
+                                "dni": data['dni'], "nombre": data['nombre'], "telefono": data['tel'], "direccion": data['dir']
+                            }).execute()
+                        except: pass 
+                        
+                        # 2. Guardar Ticket Final
+                        ticket_final = {
+                            "cliente_dni": data['dni'], "cliente_nombre": data['nombre'],
+                            "marca": data['marca'], "modelo": data['modelo'],
+                            "imei": data['imei'], "contrasena": data['pass'],
+                            "motivo": data['motivo'], "descripcion": data['desc'],
+                            "precio": data['precio'], "fecha_entrega": data['fecha'],
+                            "acuenta": acuenta, "saldo": saldo, # <--- DATOS FINANCIEROS
+                            "metodo_pago": metodo, "cod_operacion": operacion,
+                            "estado": "Pendiente"
+                        }
+                        res_t = supabase.table("tickets").insert(ticket_final).execute()
+                        
+                        # 3. Generar PDF
+                        if res_t.data:
+                            t_id = res_t.data[0]['id']
+                            # Agregamos datos extra para el PDF
+                            ticket_final['id'] = t_id
+                            ticket_final['telefono'] = data['tel']
+                            
+                            st.session_state.ultimo_pdf = generar_ticket_pdf(ticket_final)
+                            st.session_state.ultimo_id = t_id
+                            
+                            st.session_state.recepcion_step = 3 # Éxito
+                            st.rerun()
+                            
+                    except Exception as e: st.error(f"Error: {e}")
+            
+            if st.button("⬅️ Volver a editar datos"):
+                st.session_state.recepcion_step = 1
+                st.rerun()
 
+        # === PASO 3: ÉXITO Y DESCARGA ===
+        elif st.session_state.recepcion_step == 3:
+            st.markdown("### 🎉 ¡Registro Exitoso!")
+            st.balloons()
+            
+            st.success(f"Ticket #{st.session_state.ultimo_id} generado correctamente.")
+            
+            c_down, c_new = st.columns(2)
+            
+            with c_down:
+                st.download_button(
+                    label="📥 DESCARGAR TICKET PDF",
+                    data=st.session_state.ultimo_pdf,
+                    file_name=f"Ticket_{st.session_state.ultimo_id}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True
+                )
+            
+            with c_new:
+                if st.button("➕ NUEVO SERVICIO", use_container_width=True):
+                    st.session_state.recepcion_step = 1
+                    st.session_state.temp_data = {}
+                    st.rerun()
+
+    # --- COLUMNA DERECHA: LIVE FEED ---
+    with col_der:
+        st.markdown("### ⏱️ Hoy")
+        # Filtro simple por tickets del día
+        today = datetime.now().strftime('%Y-%m-%dT00:00:00')
+        tickets = supabase.table("tickets").select("*").gte("created_at", today).order("created_at", desc=True).execute().data
+        
+        if tickets:
+            for t in tickets:
+                st.markdown(f"""
+                <div class="ticket-item">
+                    <b>#{t['id']} | {t['cliente_nombre']}</b><br>
+                    <span style='font-size:0.9em'>{t['marca']} - {t['motivo']}</span><br>
+                    <span style='color:green'>A cuenta: S/ {t['acuenta']}</span> | <span style='color:red'>Debe: S/ {t['saldo']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else: st.info("Sin ingresos hoy.")
 
 elif selected == "Inventario":
-    # (Tu código de inventario va aquí - Lo resumo para que encaje)
-    st.markdown("### 📦 Inventario")
-    t_ver, t_add = st.tabs(["Catálogo", "Nuevo"])
-    
-    with t_ver:
-        q = st.text_input("Buscar producto...")
-        df = pd.DataFrame(supabase.table("productos").select("*").execute().data)
-        if not df.empty:
-            if q: df = df[df['nombre'].str.contains(q, case=False)]
-            cols = st.columns(4)
-            for i, row in df.iterrows():
-                with cols[i%4]:
-                    with st.container(border=True):
-                        if row['imagen_url']: st.image(row['imagen_url'])
-                        st.write(f"**{row['nombre']}**")
-                        st.caption(f"Stock: {row['stock']} | S/ {row['precio']}")
+    st.info("Módulo Inventario")
 
-    with t_add:
-        with st.form("add"):
-            c1, c2 = st.columns(2)
-            n = c1.text_input("Nombre"); p = c2.number_input("Precio")
-            s = c2.number_input("Stock", min_value=1); f = st.file_uploader("Foto")
-            if st.form_submit_button("Guardar"):
-                u = subir_imagen(f) if f else None
-                supabase.table("productos").insert({"nombre":n,"precio":p,"stock":s,"imagen_url":u}).execute()
-                st.success("Guardado")
-
-elif selected == "Caja & Ventas":
-    st.info("🚧 Módulo de Facturación y Cierre de Caja (Próximamente)")
-
-elif selected == "Configuración":
-    st.markdown("### ⚙️ Ajustes del Sistema")
-    st.write("Configuración de Logo, Usuarios y Permisos.")
+elif selected == "Caja":
+    st.info("Módulo Caja")
