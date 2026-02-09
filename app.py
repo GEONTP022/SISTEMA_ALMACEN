@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import requests
 from supabase import create_client
 from streamlit_option_menu import option_menu
@@ -12,10 +11,10 @@ from reportlab.lib import colors
 from reportlab.lib.units import mm
 import tempfile
 
-# --- 1. CONFIGURACIÓN VISUAL ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(
     page_title="VillaFix OS",
-    page_icon="📱",
+    page_icon="🛠️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -26,190 +25,221 @@ try:
     key = st.secrets["supabase"]["key"]
     supabase = create_client(url, key)
 except:
-    st.error("⚠️ Error de conexión. Revisa tus secrets.")
+    st.error("⚠️ Error de conexión.")
     st.stop()
 
-# --- 3. ESTILOS CSS (DISEÑO DEL VIDEO) ---
+# --- 3. ESTILOS CSS (CORRECCIÓN DE COLORES Y DISEÑO) ---
 st.markdown("""
 <style>
-    /* Fondo general */
-    .stApp { background-color: #f3f4f6; }
+    /* Fondo principal limpio */
+    .stApp { background-color: #f8f9fa; }
     
-    /* Ajuste de la barra lateral para que se vea limpia */
+    /* BARRA LATERAL ESTILO VIDEO (OSCURO + CIAN) */
     section[data-testid="stSidebar"] {
-        background-color: #111827; /* Color oscuro profesional */
+        background-color: #1e293b; /* Gris azulado oscuro profesional */
     }
     
-    /* Estilo de Tarjetas del Dashboard */
-    .kpi-card {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        border-left: 5px solid #00C2CB; /* Cian del video */
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        text-align: center;
-        margin-bottom: 10px;
+    /* Textos generales de la sidebar */
+    section[data-testid="stSidebar"] .stMarkdown h1, 
+    section[data-testid="stSidebar"] .stMarkdown h2, 
+    section[data-testid="stSidebar"] .stMarkdown h3 {
+        color: #ffffff !important;
     }
-    .kpi-value { font-size: 28px; font-weight: 800; color: #1f2937; }
-    .kpi-label { font-size: 13px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
+    
+    /* Inputs estilizados */
+    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea {
+        background-color: white !important; 
+        border: 1px solid #cbd5e1; 
+        border-radius: 6px;
+        color: #333 !important;
+    }
+    
+    /* Etiquetas de los inputs (Labels) */
+    .stTextInput label, .stNumberInput label, .stSelectbox label, .stDateInput label, .stTextArea label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #4b5563;
+    }
 
-    /* Botones estilo App */
+    /* Botones */
     .stButton>button {
-        border-radius: 8px;
-        font-weight: 700;
-        text-transform: uppercase;
-        width: 100%;
-        border: none;
-        background-color: #2563EB;
-        color: white;
-        transition: all 0.2s;
+        border-radius: 6px; font-weight: 700; width: 100%;
+        background-color: #2563EB; color: white; border: none;
     }
-    .stButton>button:hover { background-color: #1d4ed8; box-shadow: 0 4px 10px rgba(37,99,235,0.3); }
+    .stButton>button:hover { background-color: #1d4ed8; }
     
-    /* Inputs más limpios */
-    .stTextInput>div>div>input { border-radius: 6px; }
+    /* Estilo especial para botón rojo (Eliminar/Cancelar) */
+    .btn-danger { background-color: #ef4444 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. BARRA LATERAL PRO (COMO EL VIDEO) ---
+# --- 4. FUNCIONES ---
+def generar_ticket_pdf(t):
+    """Ticket simplificado 80mm"""
+    width = 80 * mm; height = 297 * mm 
+    buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=(width, height))
+    c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, height-10*mm, "VILLAFIX OS")
+    c.setFont("Helvetica", 10); c.drawCentredString(width/2, height-15*mm, f"Orden #{t['id']}")
+    c.drawString(5*mm, height-25*mm, f"Cliente: {t['cliente_nombre']}")
+    c.drawString(5*mm, height-30*mm, f"Equipo: {t['marca']} {t['modelo']}")
+    c.drawString(5*mm, height-35*mm, f"Total: S/ {t['precio']:.2f}")
+    c.showPage(); c.save(); buffer.seek(0); return buffer
+
+def buscar_dni_reniec(dni):
+    token = "sk_13243.XjdL5hswUxab5zQwW5mcWr2OW3VDfNkd" # Tu token
+    try:
+        r = requests.get(f"https://api.apis.net.pe/v2/reniec/dni?numero={dni}", headers={'Authorization': f'Bearer {token}'}, timeout=3)
+        if r.status_code == 200: 
+            d = r.json(); return f"{d.get('nombres','')} {d.get('apellidoPaterno','')} {d.get('apellidoMaterno','')}".strip()
+    except: pass
+    return None
+
+# --- 5. MENÚ LATERAL (DISEÑO VIDEO) ---
 with st.sidebar:
-    # Logo o Título estilizado
-    st.markdown("<h2 style='text-align: center; color: white; margin-bottom: 20px;'>VillaFix OS</h2>", unsafe_allow_html=True)
+    st.image("https://cdn-icons-png.flaticon.com/512/900/900782.png", width=60) # Logo genérico
+    st.markdown("<h3 style='color:white; margin-top:-10px;'>VillaFix OS</h3>", unsafe_allow_html=True)
     
-    # MENÚ CON ESTILOS PERSONALIZADOS
     selected = option_menu(
-        menu_title="Módulos del Usuario",  # Título del menú
-        options=["Inicio", "Productos", "Ventas", "Servicio Técnico", "Mantenimiento Caja", "Configuración"],
-        icons=["speedometer2", "box-seam", "cart4", "phone", "cash-stack", "gear"],
-        menu_icon="grid-fill",
-        default_index=0,
+        menu_title=None,
+        options=["Dashboard", "Recepción", "Inventario", "Config"],
+        icons=["grid-fill", "tools", "box-seam", "gear-fill"],
+        default_index=1,
         styles={
             "container": {"padding": "0!important", "background-color": "transparent"},
-            "icon": {"color": "#00C2CB", "font-size": "18px"}, # Iconos color Cian
+            "icon": {"color": "#06b6d4", "font-size": "18px"}, # Cian brillante
             "nav-link": {
                 "font-size": "15px",
                 "text-align": "left",
                 "margin": "5px",
-                "color": "white",
-                "--hover-color": "#1f2937"
+                "color": "white", # TEXTO BLANCO (Corrección de color)
             },
-            "nav-link-selected": {"background-color": "#2563EB"}, # Azul seleccionado
-            "menu-title": {"color": "#9ca3af", "font-size": "12px", "font-weight": "bold", "margin-bottom": "10px"}
+            "nav-link-selected": {"background-color": "#2563EB", "font-weight": "bold"},
         }
     )
+
+# --- 6. PÁGINAS ---
+
+if selected == "Dashboard":
+    st.title("📊 Panel de Control")
+    st.info("Módulo de estadísticas")
+
+# ==========================================
+# MÓDULO RECEPCIÓN (DISEÑO IDÉNTICO A LA IMAGEN)
+# ==========================================
+elif selected == "Recepción":
     
-    st.markdown("---")
-    # Usuario activo mini
-    if 'usuario' not in st.session_state: st.session_state.usuario = "Admin"
-    st.caption(f"👤 Usuario: {st.session_state.usuario}")
-
-# --- 5. LOGICA DE NAVEGACIÓN ---
-
-# A) MÓDULO INICIO (DASHBOARD)
-if selected == "Inicio":
-    st.markdown("### 🚀 Panel de Control")
+    # -- SECCIÓN 1: INFORMACIÓN DEL CLIENTE --
+    st.markdown("#### 📝 Información del cliente")
     
-    # Datos falsos para visualización si la DB falla, o reales si conecta
-    try:
-        # Intento de cálculo real
-        ventas_hoy = 0.0
-        reparaciones_hoy = 0.0
-        # Aquí irían las queries reales
-    except:
-        pass
-
-    # TARJETAS KPI (ESTILO VIDEO)
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(f'<div class="kpi-card"><div class="kpi-value">S/ 545.00</div><div class="kpi-label">Ventas del Día</div></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="kpi-card"><div class="kpi-value">12</div><div class="kpi-label">Equipos en Taller</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="kpi-card"><div class="kpi-value">S/ 1,200</div><div class="kpi-label">Caja Total</div></div>', unsafe_allow_html=True)
-
-    st.markdown("#### 📈 Rendimiento Mensual")
-    # Gráfico de ejemplo
-    data = pd.DataFrame({'Días': ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'], 'Ventas': [150, 230, 180, 320, 400, 545]})
-    st.bar_chart(data.set_index('Días'))
-
-# B) MÓDULO PRODUCTOS (INVENTARIO)
-elif selected == "Productos":
-    st.markdown("### 📦 Gestión de Inventario")
-    t1, t2 = st.tabs(["Catálogo", "Nuevo Producto"])
-    
-    with t1:
-        st.markdown("#### Lista de Productos")
-        search = st.text_input("🔍 Buscar producto...", placeholder="Nombre o Código")
+    # Fila de búsqueda/selección
+    c_sel, c_btn1, c_btn2 = st.columns([4, 0.5, 0.5])
+    with c_sel:
+        # Lógica para cargar clientes existentes
         try:
-            q = supabase.table("productos").select("*")
-            if search: q = q.ilike("nombre", f"%{search}%")
-            df = pd.DataFrame(q.execute().data)
-            if not df.empty:
-                st.dataframe(df[['nombre', 'precio', 'stock', 'costo']], use_container_width=True)
-            else:
-                st.info("No hay productos registrados.")
-        except Exception as e:
-            st.error(f"Error de base de datos: {e}")
+            clients_db = supabase.table("clientes").select("dni, nombre").execute().data
+            client_options = {f"{c['dni']} - {c['nombre']}": c for c in clients_db}
+        except: client_options = {}
+        
+        selected_client_key = st.selectbox("Seleccione Cliente", ["Nuevo Cliente"] + list(client_options.keys()), label_visibility="collapsed")
 
-    with t2:
-        st.markdown("#### Registrar Nuevo")
-        with st.form("new_prod"):
-            c1, c2 = st.columns(2)
-            n = c1.text_input("Nombre del Producto")
-            s = c2.number_input("Stock Inicial", min_value=0, value=1)
-            p = c1.number_input("Precio Venta (S/)", min_value=0.0)
-            c = c2.number_input("Costo Compra (S/)", min_value=0.0)
+    # Botones decorativos (funcionalidad visual)
+    c_btn1.button("🗑️", help="Limpiar")
+    c_btn2.button("➕", help="Nuevo")
+
+    # Lógica de auto-llenado
+    if selected_client_key != "Nuevo Cliente":
+        cli_data = client_options[selected_client_key]
+        def_dni = cli_data['dni']
+        def_nom = cli_data['nombre']
+    else:
+        def_dni = ""; def_nom = ""
+
+    # Formulario Cliente (Grid)
+    with st.container(border=True):
+        f1, f2, f3 = st.columns([2, 1, 1])
+        nom = f1.text_input("Nombre completos", value=def_nom, placeholder="Nombre cliente")
+        dni = f2.text_input("Documento (DNI)", value=def_dni, placeholder="DNI")
+        # Botón mágico de búsqueda DNI dentro del input
+        if dni and len(dni)==8 and not nom:
+            api_name = buscar_dni_reniec(dni)
+            if api_name: nom = api_name; st.rerun()
             
-            if st.form_submit_button("💾 Guardar Producto"):
-                try:
-                    supabase.table("productos").insert({
-                        "nombre": n, "stock": s, "precio": p, "costo": c
-                    }).execute()
-                    st.success("✅ Producto agregado correctamente")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al guardar: {e}")
-
-# C) MÓDULO VENTAS (POS)
-elif selected == "Ventas":
-    st.markdown("### 🛒 Punto de Venta")
-    c_cat, c_ticket = st.columns([1.5, 1])
-    
-    with c_cat:
-        st.info("Selecciona productos del inventario")
-        # (Aquí va la lógica de búsqueda de productos que ya teníamos)
+        cel = f3.text_input("Celular", placeholder="Celular")
         
-    with c_ticket:
-        st.markdown("""
-        <div style="background:white; padding:15px; border-radius:10px; border:1px solid #ddd;">
-            <h4 style="text-align:center;">TICKET DE VENTA</h4>
-            <hr>
-            <p style="text-align:center; color:gray;">Carrito Vacío</p>
-            <h3 style="text-align:right;">Total: S/ 0.00</h3>
-            <button style="width:100%; background:#10b981; color:white; border:none; padding:10px; border-radius:5px; font-weight:bold;">COBRAR</button>
-        </div>
-        """, unsafe_allow_html=True)
+        f4, f5 = st.columns(2)
+        direc = f4.text_input("Direccion", placeholder="Dirección")
+        email = f5.text_input("Email", placeholder="Email")
 
-# D) MÓDULO SERVICIO TÉCNICO
-elif selected == "Servicio Técnico":
-    st.markdown("### 🛠️ Taller de Reparaciones")
-    t_ingreso, t_lista = st.tabs(["Nuevo Ingreso", "En Taller"])
+    st.write("") # Espacio
+
+    # -- SECCIÓN 2: INFORMACIÓN DE RECEPCIÓN --
+    st.markdown("#### 🔧 Informacion de la recepción")
     
-    with t_ingreso:
-        c1, c2 = st.columns(2)
-        dni = c1.text_input("DNI Cliente")
-        nom = c2.text_input("Nombre Cliente")
-        eq = c1.text_input("Equipo (Modelo)")
-        falla = c2.text_area("Falla Reportada")
-        precio = st.number_input("Precio Estimado", 0.0)
+    with st.container(border=True):
+        # Fila 1: Equipo
+        r1, r2, r3 = st.columns(3)
+        marca = r1.selectbox("Marca", ["Samsung", "Apple", "Xiaomi", "Huawei", "Motorola", "Otro"])
+        modelo = r2.text_input("Modelo", placeholder="Ejm: iPhone 13 Pro")
+        imei = r3.text_input("N° IMEI", placeholder="Ejm: 35416305...")
         
-        if st.button("Generar Orden de Servicio"):
-            # Lógica de guardado
-            st.success("Orden Generada #001")
+        # Fila 2: Datos Servicio
+        r4, r5, r6 = st.columns(3)
+        motivo = r4.selectbox("Motivo", ["Reparación", "Mantenimiento", "Garantía", "Software"])
+        f_recep = r5.date_input("Fecha Recepción", value=date.today())
+        f_entr = r6.date_input("Fecha Posible Entrega", value=date.today())
+        
+        # Fila 3: Técnico y Costos
+        r7, r8, r9 = st.columns(3)
+        costo = r7.number_input("Costo Reparación", min_value=0.0, step=5.0)
+        clave = r8.text_input("Contraseña / PIN", placeholder="clave telefono")
+        
+        # Cargar técnicos (Usuarios)
+        try:
+            tecnicos = [u['nombre'] for u in supabase.table("usuarios").select("nombre").execute().data]
+        except: tecnicos = ["Admin"]
+        tecnico = r9.selectbox("Tecnico Responsable", tecnicos)
+        
+        # Fila 4: Observaciones
+        obs = st.text_area("Detalle / Fallas / Observaciones", placeholder="Observaciones", height=100)
 
-# E) MANTENIMIENTO CAJA
-elif selected == "Mantenimiento Caja":
-    st.markdown("### 💵 Flujo de Caja")
-    st.write("Aquí podrás ver los movimientos de entrada y salida de dinero.")
+    # -- BOTÓN GUARDAR (ACCIÓN FINAL) --
+    st.divider()
+    if st.button("💾 GUARDAR ORDEN DE SERVICIO", type="primary"):
+        if not dni or not nom or not modelo:
+            st.error("❌ Faltan datos obligatorios (DNI, Nombre, Modelo)")
+        else:
+            try:
+                # 1. Guardar/Actualizar Cliente
+                cli_payload = {"dni": dni, "nombre": nom, "telefono": cel, "direccion": direc, "email": email}
+                supabase.table("clientes").upsert(cli_payload).execute()
+                
+                # 2. Guardar Ticket
+                ticket_payload = {
+                    "cliente_dni": dni,
+                    "cliente_nombre": nom,
+                    "vendedor_nombre": tecnico, # Usamos el técnico seleccionado
+                    "marca": marca,
+                    "modelo": modelo,
+                    "imei": imei,
+                    "contrasena": clave,
+                    "falla_reportada": obs,
+                    "motivo": motivo, # Nuevo campo
+                    "precio": costo,
+                    "acuenta": 0,     # Inicialmente 0 si no se cobra aquí
+                    "saldo": costo,
+                    "fecha_entrega": str(f_entr),
+                    "estado": "Pendiente"
+                }
+                res = supabase.table("tickets").insert(ticket_payload).execute()
+                
+                st.success(f"✅ Orden Generada Correctamente")
+                # Opcional: Mostrar PDF aquí
+                
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
 
-# F) CONFIGURACIÓN
-elif selected == "Configuración":
-    st.markdown("### ⚙️ Ajustes del Sistema")
-    st.write("Versión 4.0 - Enterprise")
+elif selected == "Inventario":
+    st.info("Módulo Inventario")
+
+elif selected == "Config":
+    st.write("Configuración")
