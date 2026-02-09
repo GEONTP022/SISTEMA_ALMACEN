@@ -1,8 +1,8 @@
-streamlit
-supabase
+streamlit>=1.37.0
 pandas
-plotly
 requests
+supabase
 streamlit-option-menu
 reportlab
 qrcode
+plotly
