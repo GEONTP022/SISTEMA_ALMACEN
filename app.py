@@ -48,6 +48,9 @@ st.markdown("""
     .ticket-item:hover { transform: scale(1.02); border-color: #2563EB; }
     .status-badge { background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; }
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; }
+    
+    /* Estilo Imágenes Inventario */
+    .prod-img { border-radius: 8px; width: 100%; height: 150px; object-fit: cover; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -124,10 +127,14 @@ def consultar_dni_reniec(dni):
 
 def subir_imagen(archivo):
     try:
+        # Nombre único
         f = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+        # Subir
         supabase.storage.from_("fotos_productos").upload(f, archivo.getvalue(), {"content-type": archivo.type})
+        # Obtener URL Pública
         return supabase.storage.from_("fotos_productos").get_public_url(f)
-    except: return None
+    except Exception as e:
+        return None
 
 # --- 5. MENÚ ---
 with st.sidebar:
@@ -146,7 +153,7 @@ with st.sidebar:
         }
     )
 
-# === LIMPIEZA AUTOMÁTICA (AUTO-CLEAN) ===
+# === LIMPIEZA AUTOMÁTICA ===
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
 
 if st.session_state.last_tab != selected:
@@ -246,13 +253,12 @@ elif selected == "Recepción":
                 
                 def guardar(fin_acu, fin_met):
                     try:
-                        # Cliente
                         try:
                             supabase.table("clientes").insert({
                                 "dni": data['dni'], "nombre": data['nombre'], "telefono": data['tel'], "direccion": data['dir']
                             }).execute()
                         except: pass
-                        # Ticket
+                        
                         res = supabase.table("tickets").insert({
                             "cliente_dni": data['dni'], "cliente_nombre": data['nombre'],
                             "marca": data['marca'], "modelo": data['modelo'], "imei": data['imei'],
@@ -288,7 +294,6 @@ elif selected == "Recepción":
             st.balloons()
             st.download_button("📥 DESCARGAR TICKET (80mm)", st.session_state.updf, f"Ticket_{st.session_state.uid}.pdf", "application/pdf", type="primary", use_container_width=True)
             
-            # BOTÓN QUE LIMPIA TODO
             if st.button("➕ NUEVO CLIENTE (Limpiar)", use_container_width=True):
                 st.session_state.recepcion_step = 1
                 st.session_state.temp_data = {}
@@ -330,7 +335,10 @@ elif selected == "Inventario":
             for i, r in enumerate(data):
                 with cols[i%3]:
                     with st.container(border=True):
-                        if r['imagen_url']: st.image(r['imagen_url'])
+                        if r['imagen_url']:
+                            st.image(r['imagen_url'], use_container_width=True)
+                        else:
+                            st.markdown("🖼️ *Sin imagen*")
                         st.write(f"**{r['nombre']}**")
                         st.caption(f"Stock: {r['stock']} | S/ {r['precio']}")
     with t2:
@@ -344,4 +352,4 @@ elif selected == "Inventario":
                 st.success("Guardado")
 
 elif selected == "Config":
-    st.title("⚙️ Configuración"); st.write("v3.0 Final")
+    st.title("⚙️ Configuración"); st.write("v3.1 Final")
