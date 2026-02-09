@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import requests
 from supabase import create_client
 from streamlit_option_menu import option_menu
@@ -10,7 +9,6 @@ import textwrap
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import mm
-import qrcode
 import tempfile
 
 # --- CONFIGURACIÓN ---
@@ -23,317 +21,242 @@ try:
     supabase = create_client(url, key)
 except: st.error("⚠️ Error Conexión DB"); st.stop()
 
-# --- ESTILOS CSS PRO ---
+# --- ESTILOS CSS ---
 st.markdown("""
 <style>
     .stApp { background-color: #f1f5f9; }
-    .big-metric { background: white; padding: 15px; border-radius: 10px; border-left: 5px solid #2563EB; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .stButton>button { border-radius: 6px; font-weight: 600; width: 100%; text-transform: uppercase; }
-    .success-box { padding: 10px; background-color: #d1fae5; color: #065f46; border-radius: 8px; margin-bottom: 10px; }
-    .warning-box { padding: 10px; background-color: #fef3c7; color: #92400e; border-radius: 8px; margin-bottom: 10px; }
+    .kpi-card { background: white; padding: 20px; border-radius: 12px; border-left: 5px solid #2563EB; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; }
+    .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; width: 100%; }
+    
+    /* Tarjeta Ticket */
+    .ticket-card { background: white; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 10px; }
+    .badge-ok { background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.8em; float: right; }
+    .badge-warn { background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.8em; float: right; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNCIONES CORE ---
+# --- FUNCIONES ---
 
-def generar_pdf_universal(tipo, id_doc, cliente, items, totales, vendedor):
-    """Genera Ticket Térmico para Venta, Reparación o Cotización"""
+def generar_pdf(t):
+    """Ticket 80mm"""
     width = 80 * mm; height = 297 * mm 
     buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=(width, height))
     margin = 5 * mm; y = height - 10 * mm
     
-    # Encabezado
-    c.setFillColor(colors.black)
-    c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, y, "VILLAFIX IMPORT"); y -= 5*mm
-    c.setFont("Helvetica", 8); c.drawCentredString(width/2, y, "RUC: 10123456789"); y -= 4*mm
-    c.drawCentredString(width/2, y, "Av. Tecnológica 123, Lima"); y -= 4*mm
-    c.drawCentredString(width/2, y, f"Vendedor: {vendedor}"); y -= 6*mm
+    c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, y, "VILLAFIX OS"); y -= 5*mm
+    c.setFont("Helvetica", 8); c.drawCentredString(width/2, y, "Servicio Técnico"); y -= 5*mm
     c.line(margin, y, width-margin, y); y -= 5*mm
     
-    # Título Documento
-    titulo = "TICKET VENTA" if tipo == "Venta" else ("COTIZACION" if tipo == "Cotizacion" else "ORDEN SERVICIO")
-    c.setFont("Helvetica-Bold", 14); c.drawCentredString(width/2, y, f"{titulo} #{id_doc}"); y -= 8*mm
+    c.setFont("Helvetica-Bold", 14); c.drawCentredString(width/2, y, f"ORDEN #{t['id']}"); y -= 8*mm
     
-    # Cliente
-    c.setFont("Helvetica", 9); c.drawString(margin, y, f"Cliente: {cliente['nombre']}"); y -= 4*mm
-    c.drawString(margin, y, f"DNI/RUC: {cliente['dni']}"); y -= 6*mm
+    c.setFont("Helvetica", 9); c.drawString(margin, y, f"Cliente: {t['cliente_nombre']}"); y -= 4*mm
+    c.drawString(margin, y, f"DNI: {t['cliente_dni']}"); y -= 6*mm
     
     c.line(margin, y, width-margin, y); y -= 5*mm
+    c.setFont("Helvetica-Bold", 9); c.drawString(margin, y, f"EQUIPO: {t['marca']} {t['modelo']}"); y -= 5*mm
     
-    # Cuerpo (Items)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawString(margin, y, "DESCRIPCION"); c.drawRightString(width-margin, y, "TOTAL"); y -= 4*mm
-    c.setFont("Helvetica", 8)
+    c.setFont("Helvetica", 9)
+    for line in textwrap.wrap(f"Falla: {t['falla_reportada']}", 28):
+        c.drawString(margin, y, line); y -= 4*mm
     
-    for item in items:
-        # item = [nombre, cant, precio, subtotal] o similar
-        desc = f"{item['cant']} x {item['nombre']}"
-        lines = textwrap.wrap(desc, 25)
-        for line in lines:
-            c.drawString(margin, y, line)
-            y -= 4*mm
-        c.drawRightString(width-margin, y+4*mm, f"S/ {item['total']:.2f}")
-    
-    y -= 2*mm
-    c.line(margin, y, width-margin, y); y -= 5*mm
-    
-    # Totales
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(margin, y, "TOTAL A PAGAR:"); c.drawRightString(width-margin, y, f"S/ {totales['total']:.2f}"); y -= 6*mm
-    
-    if tipo == "Reparacion":
-        c.setFont("Helvetica", 9)
-        c.drawString(margin, y, "A Cuenta:"); c.drawRightString(width-margin, y, f"S/ {totales['acuenta']:.2f}"); y -= 5*mm
-        c.drawString(margin, y, "Saldo:"); c.drawRightString(width-margin, y, f"S/ {totales['saldo']:.2f}"); y -= 5*mm
+    # Fecha Entrega
+    if t.get('fecha_entrega'):
+        y -= 2*mm
+        c.setFont("Helvetica-Bold", 9); c.drawString(margin, y, f"Entrega Aprox: {t['fecha_entrega']}")
+        y -= 6*mm
 
-    c.setFont("Helvetica", 7); c.drawCentredString(width/2, y-10*mm, "Gracias por su preferencia"); 
+    c.line(margin, y, width-margin, y); y -= 5*mm
+    c.setFont("Helvetica", 10); c.drawString(margin, y, "TOTAL:"); c.drawRightString(width-margin, y, f"S/ {t['precio']:.2f}"); y -= 5*mm
+    c.drawString(margin, y, "A CUENTA:"); c.drawRightString(width-margin, y, f"S/ {t['acuenta']:.2f}"); y -= 6*mm
+    c.setFont("Helvetica-Bold", 12); c.drawString(margin, y, "SALDO:"); c.drawRightString(width-margin, y, f"S/ {t['saldo']:.2f}"); y -= 10*mm
+    
     c.showPage(); c.save(); buffer.seek(0); return buffer
 
-def buscar_dni_api(dni):
-    # (Tu función de búsqueda DNI aquí - Resumida)
-    return None 
-
-# --- INICIALIZAR SESIÓN ---
-if 'carrito' not in st.session_state: st.session_state.carrito = []
-if 'usuario_actual' not in st.session_state: st.session_state.usuario_actual = "Admin"
-
-# --- SIDEBAR (EL CENTRO DE MANDO) ---
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2897/2897785.png", width=50)
-    st.markdown("### VillaFix ERP")
-    
-    # SELECCIÓN DE USUARIO (REQ #4 y #6)
-    usuarios_db = supabase.table("usuarios").select("nombre").execute().data
-    lista_users = [u['nombre'] for u in usuarios_db] if usuarios_db else ["Admin"]
-    st.session_state.usuario_actual = st.selectbox("👤 Usuario Activo", lista_users)
-    
-    menu = option_menu(None, 
-        ["Dashboard", "Punto de Venta", "Taller/Servicio", "Cotizaciones", "Logística", "Clientes/CRM"], 
-        icons=["graph-up", "cart4", "tools", "file-earmark-text", "box-seam", "people"], 
-        default_index=0
-    )
-
-# ==========================================
-# 1. DASHBOARD (REQ #3, #4)
-# ==========================================
-if menu == "Dashboard":
-    st.markdown(f"### 📊 Reportes Generales - {st.session_state.usuario_actual}")
-    
-    # Filtros de fecha
-    c1, c2 = st.columns(2)
-    f_inicio = c1.date_input("Desde", date.today() - timedelta(days=30))
-    f_fin = c2.date_input("Hasta", date.today())
-    
-    # Consultas
+def consultar_reniec(dni):
+    token = "sk_13243.XjdL5hswUxab5zQwW5mcWr2OW3VDfNkd" # Tu token
     try:
-        ventas = pd.DataFrame(supabase.table("ventas").select("*").gte("created_at", f_inicio).lte("created_at", f_fin).execute().data)
-        tickets = pd.DataFrame(supabase.table("tickets").select("*").gte("created_at", f_inicio).lte("created_at", f_fin).execute().data)
-    except: ventas = pd.DataFrame(); tickets = pd.DataFrame()
+        r = requests.get(f"https://api.apis.net.pe/v2/reniec/dni?numero={dni}", headers={'Authorization': f'Bearer {token}'}, timeout=3)
+        if r.status_code == 200: 
+            d = r.json(); return f"{d.get('nombres','')} {d.get('apellidoPaterno','')} {d.get('apellidoMaterno','')}".strip()
+    except: pass
+    return None
 
-    # KPIs
-    total_ventas = ventas['total'].sum() if not ventas.empty else 0
-    total_servicios = tickets[tickets['estado']=='Entregado']['precio'].sum() if not tickets.empty else 0
-    
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Ventas Productos", f"S/ {total_ventas:.2f}")
-    k2.metric("Servicios Taller", f"S/ {total_servicios:.2f}")
-    k3.metric("Ingreso Total", f"S/ {total_ventas + total_servicios:.2f}")
-    
-    st.divider()
-    
-    # GRÁFICOS (REQ #4: GESTIÓN POR VENDEDOR)
-    g1, g2 = st.columns(2)
-    
-    with g1:
-        st.subheader("🏆 Top Vendedores")
-        if not ventas.empty:
-            por_vendedor = ventas.groupby('vendedor_nombre')['total'].sum().reset_index()
-            fig = px.bar(por_vendedor, x='vendedor_nombre', y='total', color='vendedor_nombre', title="Ventas por Empleado")
-            st.plotly_chart(fig, use_container_width=True)
-        else: st.info("Sin datos de ventas.")
-        
-    with g2:
-        st.subheader("📈 Ventas Diarias")
-        if not ventas.empty:
-            ventas['fecha'] = pd.to_datetime(ventas['created_at']).dt.date
-            por_dia = ventas.groupby('fecha')['total'].sum().reset_index()
-            fig2 = px.line(por_dia, x='fecha', y='total', title="Evolución de Ingresos")
-            st.plotly_chart(fig2, use_container_width=True)
+def subir_imagen(archivo):
+    try:
+        f = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+        supabase.storage.from_("fotos_productos").upload(f, archivo.getvalue(), {"content-type": archivo.type})
+        return supabase.storage.from_("fotos_productos").get_public_url(f)
+    except: return None
 
-# ==========================================
-# 2. PUNTO DE VENTA (POS) (REQ #10)
-# ==========================================
-elif menu == "Punto de Venta":
-    st.markdown("### 🛒 Caja / Venta de Productos")
+# --- DIALOGOS ---
+@st.dialog("Gestión Ticket")
+def modal_ticket(t):
+    st.subheader(f"#{t['id']} {t['cliente_nombre']}")
+    c1, c2 = st.columns(2)
+    c1.write(f"📱 **{t['marca']}**"); c2.write(f"🔑 **{t['contrasena']}**")
+    st.info(f"Falla: {t['falla_reportada']}")
+    if t['fecha_entrega']: st.caption(f"📅 Entrega estimada: {t['fecha_entrega']}")
     
-    col_prods, col_carrito = st.columns([1.5, 1])
+    col_a, col_b = st.columns(2)
+    with col_a:
+        pdf = generar_pdf(t)
+        st.download_button("🖨️ PDF", pdf, f"Ticket_{t['id']}.pdf", "application/pdf", use_container_width=True)
     
-    with col_prods:
-        st.markdown("#### Catálogo")
-        search = st.text_input("🔍 Buscar producto...")
-        q = supabase.table("productos").select("*")
-        if search: q = q.ilike("nombre", f"%{search}%")
-        prods = q.execute().data
-        
-        if prods:
-            for p in prods:
-                with st.container(border=True):
-                    c_txt, c_add = st.columns([3, 1])
-                    c_txt.write(f"**{p['nombre']}** | Stock: {p['stock']}")
-                    c_txt.caption(f"Precio: S/ {p['precio']}")
-                    if c_add.button("➕", key=f"add_{p['id']}"):
-                        st.session_state.carrito.append(p)
-                        st.toast(f"Agregado: {p['nombre']}")
-    
-    with col_carrito:
-        st.markdown("#### 🛍️ Carrito Actual")
-        if st.session_state.carrito:
-            df_cart = pd.DataFrame(st.session_state.carrito)
-            # Agrupar
-            cart_resumen = df_cart.groupby(['id', 'nombre', 'precio']).size().reset_index(name='cantidad')
-            cart_resumen['subtotal'] = cart_resumen['precio'] * cart_resumen['cantidad']
-            
-            st.dataframe(cart_resumen[['nombre', 'cantidad', 'subtotal']], hide_index=True, use_container_width=True)
-            
-            total = cart_resumen['subtotal'].sum()
-            st.markdown(f"### Total: S/ {total:.2f}")
-            
-            if st.button("🗑️ Limpiar"): st.session_state.carrito = []; st.rerun()
-            
-            st.divider()
-            dni_cli = st.text_input("DNI Cliente (Venta)")
-            metodo = st.selectbox("Pago", ["Efectivo", "Yape", "Tarjeta"])
-            
-            if st.button("✅ PROCESAR VENTA", type="primary"):
-                # Guardar Venta
-                v_data = {"cliente_dni": dni_cli, "cliente_nombre": "General", "vendedor_nombre": st.session_state.usuario_actual, "total": total, "metodo_pago": metodo, "tipo_doc": "Boleta"}
-                venta = supabase.table("ventas").insert(v_data).execute()
-                vid = venta.data[0]['id']
-                
-                # Guardar Detalle y PDF
-                items_pdf = []
-                for _, row in cart_resumen.iterrows():
-                    supabase.table("detalle_ventas").insert({"venta_id": vid, "producto_nombre": row['nombre'], "cantidad": row['cantidad'], "precio_unitario": row['precio'], "subtotal": row['subtotal']}).execute()
-                    items_pdf.append({"nombre": row['nombre'], "cant": row['cantidad'], "total": row['subtotal']})
-                
-                pdf = generar_pdf_universal("Venta", vid, {"nombre": "General", "dni": dni_cli}, items_pdf, {"total": total}, st.session_state.usuario_actual)
-                st.session_state.last_pdf = pdf
-                st.session_state.last_pdf_name = f"Venta_{vid}.pdf"
-                st.session_state.carrito = [] # Limpiar
-                st.success("Venta Exitosa")
+    with col_b:
+        if t['saldo'] > 0:
+            if st.button("💰 Cobrar Saldo", use_container_width=True):
+                supabase.table("tickets").update({"saldo":0, "acuenta":t['precio'], "estado":"Entregado"}).eq("id", t['id']).execute()
                 st.rerun()
-                
-            if 'last_pdf' in st.session_state:
-                st.download_button("🖨️ Imprimir Ticket", st.session_state.last_pdf, st.session_state.last_pdf_name, "application/pdf")
+        else: st.success("Pagado")
+
+# --- MENÚ ---
+with st.sidebar:
+    st.title("VillaFix OS")
+    selected = option_menu(None, ["Dashboard", "Recepción", "Inventario", "Config"], icons=["graph-up", "tools", "box-seam", "gear"])
+
+if 'temp_nom' not in st.session_state: st.session_state.temp_nom = ""
 
 # ==========================================
-# 3. TALLER / SERVICIO (REQ #9, #10)
+# 1. DASHBOARD
 # ==========================================
-elif menu == "Taller/Servicio":
-    t1, t2 = st.tabs(["Nueva Recepción", "Historial Taller"])
+if selected == "Dashboard":
+    st.header("📊 Panel de Control")
+    try:
+        # Consultamos datos reales
+        tickets = supabase.table("tickets").select("*").execute().data
+        prods = supabase.table("productos").select("id", count="exact").execute().count
+    except: tickets = []; prods = 0
+    
+    # Cálculos reales
+    hoy = datetime.now().strftime('%Y-%m-%d')
+    caja = 0.0
+    pendientes = 0
+    
+    for t in tickets:
+        if t['estado'] == 'Pendiente': pendientes += 1
+        if t['created_at'].startswith(hoy):
+            if t['estado'] == 'Anulado': continue
+            elif t['estado'] == 'Entregado': caja += float(t['precio'])
+            else: caja += float(t['acuenta'])
+
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f'<div class="kpi-card"><h3>📦 {prods}</h3><p>Productos</p></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="kpi-card"><h3>🔧 {pendientes}</h3><p>En Taller</p></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="kpi-card"><h3>💰 S/ {caja:.2f}</h3><p>Caja Hoy</p></div>', unsafe_allow_html=True)
+
+# ==========================================
+# 2. RECEPCIÓN (CORREGIDO: DNI y FECHA)
+# ==========================================
+elif selected == "Recepción":
+    c_form, c_feed = st.columns([1.5, 2])
+
+    with c_form:
+        st.subheader("🛠️ Nuevo Servicio")
+        
+        # 1. BÚSQUEDA DNI
+        col_dni, col_btn = st.columns([2, 1])
+        dni = col_dni.text_input("DNI Cliente")
+        if col_btn.button("🔍 Buscar"):
+            # Primero buscamos en base de datos local
+            local = supabase.table("clientes").select("nombre").eq("dni", dni).execute()
+            if local.data: 
+                st.session_state.temp_nom = local.data[0]['nombre']
+                st.toast("Cliente encontrado en BD")
+            else:
+                # Si no, buscamos en RENIEC
+                api_nom = consultar_reniec(dni)
+                if api_nom: 
+                    st.session_state.temp_nom = api_nom
+                    st.toast("Datos obtenidos de RENIEC")
+                else: 
+                    st.warning("DNI no encontrado, ingrese nombre manual.")
+
+        nombre = st.text_input("Nombre", value=st.session_state.temp_nom)
+        
+        c1, c2 = st.columns(2)
+        eq = c1.text_input("Equipo (Marca/Modelo)")
+        imei = c2.text_input("IMEI / Serie")
+        falla = st.text_area("Falla Reportada")
+        
+        # 2. FECHA ENTREGA (NUEVO)
+        f_entrega = st.date_input("Fecha Entrega Estimada", min_value=date.today())
+        
+        c3, c4 = st.columns(2)
+        precio = c3.number_input("Costo Total", 0.0)
+        acuenta = c4.number_input("Adelanto", 0.0)
+        
+        if st.button("💾 GUARDAR TICKET", type="primary"):
+            if not dni or not nombre or not eq:
+                st.error("Falta DNI, Nombre o Equipo")
+            else:
+                # Guardar cliente
+                try: supabase.table("clientes").insert({"dni":dni, "nombre":nombre}).execute()
+                except: pass
+                
+                # Guardar Ticket (Con los campos correctos)
+                data = {
+                    "cliente_dni": dni, "cliente_nombre": nombre, "marca": eq, "imei": imei,
+                    "falla_reportada": falla, "precio": precio, "acuenta": acuenta, "saldo": precio-acuenta,
+                    "fecha_entrega": str(f_entrega), "estado": "Pendiente" # <--- AQUI ESTABA EL ERROR DE LA FECHA
+                }
+                supabase.table("tickets").insert(data).execute()
+                st.success("Ticket Generado Exitosamente")
+                st.session_state.temp_nom = "" # Limpiar
+                st.rerun()
+
+    # FEED DE TICKETS
+    with c_feed:
+        st.subheader("📋 Tickets de Hoy")
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        tickets = supabase.table("tickets").select("*").gte("created_at", hoy).order("created_at", desc=True).execute().data
+        
+        if tickets:
+            for t in tickets:
+                status_html = '<span class="badge-ok">PAGADO</span>' if t['saldo'] <= 0 else f'<span class="badge-warn">DEBE S/{t["saldo"]}</span>'
+                if t['estado'] == 'Anulado': status_html = '<span style="float:right; color:grey; font-weight:bold;">🚫 ANULADO</span>'
+                
+                with st.container():
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div style="display:flex; justify-content:space-between;">
+                            <b>#{t['id']} {t['cliente_nombre'].split()[0]}</b>
+                            {status_html}
+                        </div>
+                        <div style="color:#555; font-size:0.9em;">📱 {t['marca']}</div>
+                        <div style="color:#888; font-size:0.8em; margin-top:5px;">📅 Entrega: {t['fecha_entrega']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button("👁️ VER", key=f"b_{t['id']}", use_container_width=True):
+                        modal_ticket(t)
+        else: st.info("No hay ingresos hoy.")
+
+# ==========================================
+# 3. INVENTARIO (CORREGIDO ERROR INSERT)
+# ==========================================
+elif selected == "Inventario":
+    st.subheader("📦 Inventario")
+    t1, t2 = st.tabs(["Ver", "Nuevo"])
     
     with t1:
-        # (Aquí va tu código de Recepción V3.6 refinado, lo resumo para encajar)
-        st.markdown("### 🛠️ Recepción Técnica")
-        c_dni, c_nom = st.columns([1, 2])
-        dni = c_dni.text_input("DNI Cliente")
-        nombre = c_nom.text_input("Nombre")
-        
-        # REQ #8: NOTIFICACIÓN CUMPLEAÑOS
-        if dni:
-            res = supabase.table("clientes").select("fecha_nacimiento").eq("dni", dni).execute()
-            if res.data and res.data[0]['fecha_nacimiento']:
-                fn = datetime.strptime(res.data[0]['fecha_nacimiento'], '%Y-%m-%d')
-                if fn.month == date.today().month and fn.day == date.today().day:
-                    st.balloons()
-                    st.success("🎂 ¡HOY ES EL CUMPLEAÑOS DEL CLIENTE! 🎉")
-
-        c1, c2 = st.columns(2)
-        eq = c1.text_input("Equipo"); falla = c2.text_area("Falla")
-        costo = c1.number_input("Costo", 0.0); acuenta = c2.number_input("Adelanto", 0.0)
-        
-        if st.button("💾 GENERAR TICKET SERVICIO"):
-            data = {"cliente_dni": dni, "cliente_nombre": nombre, "vendedor_nombre": st.session_state.usuario_actual, "marca": eq, "descripcion": falla, "precio": costo, "acuenta": acuenta, "saldo": costo-acuenta}
-            res = supabase.table("tickets").insert(data).execute()
-            # Generar PDF Reparacion...
-            st.success("Ticket Generado")
-
-    with t2:
-        st.markdown("### 📜 Historial por Cliente (REQ #9)")
-        search_h = st.text_input("Buscar DNI para ver historial")
-        if search_h:
-            hist = supabase.table("tickets").select("*").eq("cliente_dni", search_h).order("created_at", desc=True).execute().data
-            if hist:
-                for h in hist:
-                    with st.container(border=True):
-                        st.write(f"**{h['created_at'][:10]}** | {h['marca']} | {h['descripcion']}")
-                        st.caption(f"Estado: {h['estado']} | Técnico: {h['vendedor_nombre']}")
-            else: st.info("Sin historial.")
-
-# ==========================================
-# 4. COTIZACIONES (REQ #11)
-# ==========================================
-elif menu == "Cotizaciones":
-    st.markdown("### 📄 Generador de Presupuestos")
-    st.info("Esto genera un documento pero NO descuenta stock.")
-    
-    col_c, col_d = st.columns(2)
-    nom_c = col_c.text_input("Cliente Cotización")
-    dni_c = col_d.text_input("DNI/RUC")
-    items_cot = st.text_area("Detalles (Ej: 1x Pantalla A54 - S/ 150)", height=150)
-    total_cot = st.number_input("Total Estimado", 0.0)
-    
-    if st.button("🖨️ IMPRIMIR COTIZACIÓN"):
-        # Guardar en tabla cotizaciones
-        cot = supabase.table("cotizaciones").insert({
-            "cliente_nombre": nom_c, "cliente_dni": dni_c, "detalles": items_cot, 
-            "total": total_cot, "vendedor_nombre": st.session_state.usuario_actual
-        }).execute()
-        cid = cot.data[0]['id']
-        
-        # PDF Simple
-        pdf = generar_pdf_universal("Cotizacion", cid, {"nombre": nom_c, "dni": dni_c}, [{"nombre": items_cot, "cant": 1, "total": total_cot}], {"total": total_cot}, st.session_state.usuario_actual)
-        st.download_button("📥 Descargar PDF", pdf, f"Cotizacion_{cid}.pdf", "application/pdf")
-
-# ==========================================
-# 5. LOGÍSTICA / ALMACÉN (REQ #2, #5)
-# ==========================================
-elif menu == "Logística":
-    st.markdown("### 📦 Gestión de Almacén y Transporte")
-    
-    tab_inv, tab_mov = st.tabs(["Inventario Global", "Guía de Transporte"])
-    
-    with tab_inv:
-        st.dataframe(pd.DataFrame(supabase.table("productos").select("*").execute().data), use_container_width=True)
-        
-    with tab_mov:
-        st.markdown("#### 🚚 Generar Guía de Salida (Transporte)")
-        dest = st.text_input("Dirección Destino / Tienda")
-        motivo = st.selectbox("Motivo", ["Venta", "Traslado entre tiendas", "Exportación", "Garantía"])
-        prods_mov = st.multiselect("Productos", ["Cargador", "Pantalla", "Case"]) # Conectar con DB real
-        
-        if st.button("REGISTRAR SALIDA"):
-            st.success("Movimiento registrado. Stock actualizado.")
-
-# ==========================================
-# 6. CRM / CLIENTES (REQ #7, #8)
-# ==========================================
-elif menu == "Clientes/CRM":
-    st.markdown("### 👥 Base de Datos Clientes")
-    
-    with st.form("nuevo_cli"):
-        c1, c2 = st.columns(2)
-        dni_new = c1.text_input("DNI")
-        nom_new = c2.text_input("Nombre")
-        tel_new = c1.text_input("Teléfono")
-        nac_new = c2.date_input("Fecha Nacimiento (Para bonos)")
-        
-        if st.form_submit_button("Guardar Cliente"):
-            supabase.table("clientes").upsert({
-                "dni": dni_new, "nombre": nom_new, "telefono": tel_new, "fecha_nacimiento": str(nac_new)
-            }).execute()
-            st.success("Cliente guardado en CRM")
+        prods = pd.DataFrame(supabase.table("productos").select("*").execute().data)
+        if not prods.empty:
+            st.dataframe(prods[['nombre', 'stock', 'precio', 'costo']], use_container_width=True)
             
-    st.markdown("#### 🎂 Cumpleaños del Mes")
-    # Lógica para mostrar cumpleañeros...
-    st.info("Lista de clientes que cumplen años este mes (Para enviar ofertas).")
+    with t2:
+        c1, c2 = st.columns(2)
+        n = c1.text_input("Nombre Producto")
+        p = c2.number_input("Precio Venta", 0.0)
+        s = c1.number_input("Stock", 1)
+        c = c2.number_input("Costo Compra", 0.0)
+        foto = st.file_uploader("Foto")
+        
+        if st.button("GUARDAR PRODUCTO"):
+            url_foto = subir_imagen(foto) if foto else None
+            # Insertar con los nombres de columna EXACTOS de la base de datos nueva
+            supabase.table("productos").insert({
+                "nombre": n, "precio": p, "stock": s, "costo": c, "imagen_url": url_foto
+            }).execute()
+            st.success("Producto guardado correctamente")
+
+elif selected == "Config":
+    st.write("Configuración")
