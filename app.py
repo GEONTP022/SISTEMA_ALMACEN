@@ -146,8 +146,7 @@ with st.sidebar:
         }
     )
 
-# === 🧹 SISTEMA DE LIMPIEZA AUTOMÁTICA 🧹 ===
-# Esto detecta si cambiaste de pestaña y borra todo
+# === LIMPIEZA AUTOMÁTICA (AUTO-CLEAN) ===
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
 
 if st.session_state.last_tab != selected:
@@ -157,7 +156,6 @@ if st.session_state.last_tab != selected:
     st.session_state.last_tab = selected
     st.rerun()
 
-# Inicializar
 if 'recepcion_step' not in st.session_state: st.session_state.recepcion_step = 1
 if 'temp_data' not in st.session_state: st.session_state.temp_data = {}
 
