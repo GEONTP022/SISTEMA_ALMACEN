@@ -3,82 +3,109 @@ import pandas as pd
 import requests
 from supabase import create_client
 from streamlit_option_menu import option_menu
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import io
 import textwrap
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 import tempfile
+import plotly.express as px
 
-# --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="VillaFix OS", page_icon="🛠️", layout="wide", initial_sidebar_state="expanded")
+# --- 1. CONFIGURACIÓN INICIAL ---
+st.set_page_config(
+    page_title="VillaFix OS",
+    page_icon="🛠️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- 2. CONEXIÓN ---
+# --- 2. CONEXIÓN A BASE DE DATOS ---
 try:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     supabase = create_client(url, key)
-except: st.error("⚠️ Error DB"); st.stop()
+except:
+    st.error("⚠️ Error crítico de conexión. Verifica tus 'secrets'.")
+    st.stop()
 
-# --- 3. ESTILOS CSS (DISEÑO VILLAFIX PRO) ---
+# --- 3. ESTILOS CSS (DISEÑO PROFESIONAL VILLAFIX) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f1f5f9; }
+    /* FONDO Y TEXTOS */
+    .stApp { background-color: #f1f5f9; font-family: 'Source Sans Pro', sans-serif; }
     
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] { background-color: #0f172a; } /* Azul noche */
+    /* SIDEBAR (AZUL NOCHE) */
+    section[data-testid="stSidebar"] { background-color: #0f172a; }
     section[data-testid="stSidebar"] h1, h2, h3 { color: white !important; }
+    section[data-testid="stSidebar"] span { color: #e2e8f0; }
     
-    /* INPUTS & BOTONES */
+    /* INPUTS & FORMULARIOS */
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea {
-        background-color: white !important; border: 1px solid #cbd5e1; border-radius: 6px; color: #333 !important;
+        background-color: white !important; 
+        border: 1px solid #cbd5e1; 
+        border-radius: 6px; 
+        color: #1e293b !important;
     }
-    .stButton>button { border-radius: 6px; font-weight: 700; width: 100%; border: none; transition: 0.2s; }
     
-    /* --- TABLA DE REPARACIÓN (ESTILO ÚNICO) --- */
-    .rep-container { font-family: 'Source Sans Pro', sans-serif; margin-bottom: 8px; }
+    /* BOTONES */
+    .stButton>button {
+        border-radius: 6px; font-weight: 700; width: 100%; 
+        border: none; transition: 0.2s; background-color: #2563EB; color: white;
+    }
+    .stButton>button:hover { background-color: #1d4ed8; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    
+    /* --- TABLA DE REPARACIÓN (ESTILO PERSONALIZADO) --- */
+    .rep-container { margin-bottom: 5px; }
     
     .rep-header {
-        background-color: #334155; color: white; padding: 12px 15px; border-radius: 8px 8px 0 0;
+        background-color: #334155; color: white; padding: 12px 10px; border-radius: 8px 8px 0 0;
         font-weight: 700; font-size: 0.85em; display: flex; text-transform: uppercase; letter-spacing: 0.5px;
     }
     
-    .rep-row {
+    /* FILA DE DATOS (Diseño limpio) */
+    .rep-card {
         background-color: white; border: 1px solid #e2e8f0; border-top: none;
-        padding: 12px 15px; display: flex; align-items: center; 
-        transition: transform 0.1s, box-shadow 0.1s;
+        padding: 10px; transition: all 0.1s; display: flex; align-items: center;
     }
-    .rep-row:last-child { border-radius: 0 0 8px 8px; }
-    .rep-row:hover { background-color: #f8fafc; border-left: 4px solid #2563EB; }
+    .rep-card:hover { background-color: #f8fafc; border-left: 4px solid #2563EB; }
     
-    .rep-col { flex: 1; font-size: 0.85em; color: #475569; padding-right: 10px; }
-    .rep-col strong { color: #0f172a; font-weight: 700; }
-    .rep-col div { margin-bottom: 3px; }
+    .rep-col { flex: 1; font-size: 0.85em; color: #475569; padding: 0 8px; }
+    .rep-col strong { color: #0f172a; font-weight: 700; display: block; margin-bottom: 2px; }
+    .rep-col span { display: block; line-height: 1.3; }
     
-    /* BADGES */
-    .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7em; font-weight: 800; text-transform: uppercase; color: white; display: inline-block; }
-    .bg-blue { background-color: #3b82f6; }    /* Recepcionado */
-    .bg-green { background-color: #10b981; }   /* Entregado/Pagado */
-    .bg-red { background-color: #ef4444; }     /* Anulado/Debe */
+    /* BADGES DE ESTADO */
+    .badge { padding: 3px 8px; border-radius: 12px; font-size: 0.7em; font-weight: 800; text-transform: uppercase; color: white; display: inline-block; text-align: center; min-width: 80px; }
+    .bg-blue { background-color: #3b82f6; }    /* En Taller */
+    .bg-green { background-color: #10b981; }   /* Entregado */
+    .bg-red { background-color: #ef4444; }     /* Anulado */
     .bg-orange { background-color: #f59e0b; }  /* Pendiente */
 
-    /* BARRA DE HERRAMIENTAS */
-    .toolbar { background: #e2e8f0; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #cbd5e1; }
+    /* DASHBOARD CARDS */
+    .kpi-card { background: white; padding: 20px; border-radius: 10px; border-left: 5px solid #06b6d4; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; }
+    .kpi-val { font-size: 24px; font-weight: 800; color: #1e293b; }
+    .kpi-lbl { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES ---
+# --- 4. FUNCIONES UTILITARIAS ---
+
 def generar_ticket_pdf(t):
+    """Genera PDF térmico 80mm"""
     width = 80 * mm; height = 297 * mm 
     buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=(width, height))
     c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, height-10*mm, "VILLAFIX OS")
     c.setFont("Helvetica", 10); c.drawCentredString(width/2, height-15*mm, f"Orden #{t['id']}")
-    c.drawString(5*mm, height-25*mm, f"Cliente: {t['cliente_nombre']}")
-    c.drawString(5*mm, height-30*mm, f"Equipo: {t['marca']} {t['modelo']}")
+    c.setFont("Helvetica", 9); c.drawString(5*mm, height-25*mm, f"Cliente: {t['cliente_nombre']}")
+    c.drawString(5*mm, height-30*mm, f"DNI: {t['cliente_dni']}")
+    c.line(5*mm, height-35*mm, width-5*mm, height-35*mm)
+    c.drawString(5*mm, height-40*mm, f"Equipo: {t['marca']} {t['modelo']}")
+    c.drawString(5*mm, height-45*mm, f"Falla: {t['falla_reportada'][:30]}...")
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(5*mm, height-45*mm, f"Total: S/ {t['precio']:.2f}")
-    c.drawString(5*mm, height-50*mm, f"Saldo: S/ {t['saldo']:.2f}")
+    c.drawString(5*mm, height-55*mm, f"TOTAL: S/ {t['precio']:.2f}")
+    c.drawString(5*mm, height-60*mm, f"SALDO: S/ {t['saldo']:.2f}")
+    c.setFont("Helvetica", 8); c.drawCentredString(width/2, height-70*mm, "Gracias por su preferencia")
     c.showPage(); c.save(); buffer.seek(0); return buffer
 
 def buscar_dni_reniec(dni):
@@ -93,79 +120,107 @@ def buscar_dni_reniec(dni):
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        df.to_excel(writer, index=False, sheet_name='Data')
     return output.getvalue()
 
-# --- 5. MODALES INTERACTIVOS (ST.DIALOG) ---
+# --- 5. MODALES (ST.DIALOG) ---
 
-@st.dialog("Gestión de Reparación")
+@st.dialog("Gestión de Orden")
 def gestion_modal(t):
     st.markdown(f"### 🔧 Orden #{t['id']} - {t['cliente_nombre']}")
     
-    # Resumen rápido
-    c1, c2, c3 = st.columns(3)
-    c1.info(f"Equipo: {t['marca']} {t['modelo']}")
-    c2.warning(f"Deuda: S/ {t['saldo']:.2f}")
-    c3.success(f"Total: S/ {t['precio']:.2f}")
+    c1, c2 = st.columns(2)
+    c1.info(f"📱 **{t['marca']} {t['modelo']}**")
+    if t['saldo'] > 0: c2.error(f"💰 Debe: S/ {t['saldo']:.2f}")
+    else: c2.success("✅ Pagado")
 
-    # Menú de acciones (Pestañas como en tu imagen mental)
-    tab_pagar, tab_ver, tab_anular = st.tabs(["💰 Realizar Pago", "📄 Ver Ticket", "🚫 Anular"])
+    tab1, tab2, tab3 = st.tabs(["💵 Cobrar", "🖨️ Ticket", "⚠️ Anular"])
 
-    # --- 1. PAGAR ---
-    with tab_pagar:
-        if t['saldo'] <= 0:
-            st.success("✅ ¡Esta orden ya está pagada en su totalidad!")
+    with tab1:
+        if t['saldo'] <= 0: st.success("¡Sin deuda pendiente!")
         else:
-            st.write("Agregar pago a cuenta o cancelar total.")
-            monto_pagar = st.number_input("Monto a Pagar (S/)", min_value=0.0, max_value=float(t['saldo']), value=float(t['saldo']))
-            metodo = st.selectbox("Medio de Pago", ["Efectivo", "Yape", "Plin", "Tarjeta"])
-            
-            if st.button("✅ Confirmar Pago", use_container_width=True):
-                nuevo_acuenta = t['acuenta'] + monto_pagar
+            monto = st.number_input("Monto a pagar (S/)", 0.0, float(t['saldo']), float(t['saldo']))
+            metodo = st.selectbox("Método", ["Efectivo", "Yape", "Plin", "Tarjeta"])
+            if st.button("Confirmar Pago", use_container_width=True):
+                nuevo_acuenta = t['acuenta'] + monto
                 nuevo_saldo = t['precio'] - nuevo_acuenta
-                nuevo_estado = "Entregado" if nuevo_saldo == 0 else "Pendiente"
-                
-                supabase.table("tickets").update({
-                    "acuenta": nuevo_acuenta, "saldo": nuevo_saldo, "estado": nuevo_estado
-                }).eq("id", t['id']).execute()
-                st.toast("Pago registrado correctamente"); st.rerun()
+                estado = "Entregado" if nuevo_saldo == 0 else "Pendiente"
+                supabase.table("tickets").update({"acuenta":nuevo_acuenta, "saldo":nuevo_saldo, "estado":estado, "metodo_pago":metodo}).eq("id", t['id']).execute()
+                st.rerun()
 
-    # --- 2. VER TICKET ---
-    with tab_ver:
+    with tab2:
         pdf = generar_ticket_pdf(t)
-        st.download_button("🖨️ Descargar PDF", pdf, f"Ticket_{t['id']}.pdf", "application/pdf", use_container_width=True)
-        st.text_area("Diagnóstico Técnico", value=t['falla_reportada'], disabled=True)
+        st.download_button("Descargar PDF", pdf, f"T_{t['id']}.pdf", "application/pdf", use_container_width=True)
+        st.caption(f"Clave: {t['contrasena']}")
 
-    # --- 3. ANULAR ---
-    with tab_anular:
-        st.error("⚠️ Zona de Peligro")
-        st.write("¿Está seguro de anular esta reparación? Esta acción no se puede deshacer.")
-        if st.button("🚨 SÍ, ANULAR ORDEN", type="primary", use_container_width=True):
-            supabase.table("tickets").update({"estado": "Anulado", "saldo": 0}).eq("id", t['id']).execute()
+    with tab3:
+        st.warning("Esta acción es irreversible.")
+        if st.button("ANULAR ORDEN", type="primary", use_container_width=True):
+            supabase.table("tickets").update({"estado":"Anulado", "saldo":0}).eq("id", t['id']).execute()
             st.rerun()
 
-# --- 6. MENU LATERAL ---
+# --- 6. BARRA LATERAL (MENU PRINCIPAL) ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/900/900782.png", width=50)
     st.markdown("### VillaFix OS")
-    selected = option_menu(None, ["Dashboard", "Recepción", "Inventario", "Config"], 
-        icons=["grid-fill", "tools", "box-seam", "gear-fill"], default_index=1,
-        styles={"nav-link-selected": {"background-color": "#2563EB"}})
+    
+    selected = option_menu(
+        menu_title=None,
+        options=["Dashboard", "Recepción", "Inventario", "Config"],
+        icons=["speedometer2", "tools", "box-seam", "gear"],
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#06b6d4", "font-size": "18px"},
+            "nav-link": {"font-size": "15px", "text-align": "left", "margin": "5px", "color": "white"},
+            "nav-link-selected": {"background-color": "#2563EB"},
+        }
+    )
 
-# --- 7. CONTENIDO ---
+# --- 7. LÓGICA DE PÁGINAS ---
 
-if selected == "Recepción":
-    tab_new, tab_list = st.tabs(["✨ Nueva Recepción", "📋 Listado de Reparaciones"])
+# === DASHBOARD ===
+if selected == "Dashboard":
+    st.markdown("### 📊 Panel de Control")
+    try:
+        tickets = supabase.table("tickets").select("*").execute().data
+        prods = supabase.table("productos").select("id", count="exact").execute().count
+    except: tickets = []; prods = 0
+    
+    hoy = datetime.now().strftime('%Y-%m-%d')
+    caja = 0.0
+    pendientes = 0
+    
+    for t in tickets:
+        if t['estado'] == 'Pendiente': pendientes += 1
+        if t['created_at'].startswith(hoy):
+            if t['estado'] == 'Entregado': caja += float(t['precio'])
+            elif t['estado'] != 'Anulado': caja += float(t['acuenta'])
 
-    # --- PESTAÑA 1: FORMULARIO ---
-    with tab_new:
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f'<div class="kpi-card"><div class="kpi-val">S/ {caja:.2f}</div><div class="kpi-lbl">Caja Hoy</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="kpi-card"><div class="kpi-val">{pendientes}</div><div class="kpi-lbl">En Taller</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="kpi-card"><div class="kpi-val">{prods}</div><div class="kpi-lbl">Productos</div></div>', unsafe_allow_html=True)
+
+    st.markdown("#### 📈 Actividad Reciente")
+    if tickets:
+        df_t = pd.DataFrame(tickets)
+        df_t['fecha'] = pd.to_datetime(df_t['created_at']).dt.date
+        grafico = df_t.groupby('fecha').size().reset_index(name='Tickets')
+        st.bar_chart(grafico.set_index('fecha'))
+
+# === RECEPCIÓN (EL NÚCLEO) ===
+elif selected == "Recepción":
+    tab_form, tab_list = st.tabs(["✨ Nueva Recepción", "📋 Listado de Reparaciones"])
+
+    # PESTAÑA 1: FORMULARIO
+    with tab_form:
         st.markdown("#### Datos del Cliente")
-        c_sel, x, y = st.columns([4, 0.5, 0.5])
+        c_sel, x = st.columns([3, 1])
         try: clients = {f"{c['dni']} - {c['nombre']}": c for c in supabase.table("clientes").select("dni,nombre").execute().data}
         except: clients = {}
         sel_cli = c_sel.selectbox("Buscar Cliente", ["Nuevo"] + list(clients.keys()), label_visibility="collapsed")
         
-        # Datos automáticos
         d_dni = clients[sel_cli]['dni'] if sel_cli != "Nuevo" else ""
         d_nom = clients[sel_cli]['nombre'] if sel_cli != "Nuevo" else ""
 
@@ -182,18 +237,12 @@ if selected == "Recepción":
         with st.container(border=True):
             r1, r2, r3 = st.columns(3)
             mar = r1.selectbox("Marca", ["Samsung", "Apple", "Xiaomi", "Motorola", "Otro"])
-            mod = r2.text_input("Modelo")
-            imei = r3.text_input("IMEI")
-            
+            mod = r2.text_input("Modelo"); imei = r3.text_input("IMEI")
             r4, r5, r6 = st.columns(3)
             mot = r4.selectbox("Motivo", ["Reparación", "Mantenimiento", "Garantía"])
-            f_ent = r5.date_input("Entrega Aprox", date.today())
-            tec = r6.selectbox("Técnico", ["Admin", "Técnico 1"])
-            
+            f_ent = r5.date_input("Entrega", date.today()); tec = r6.selectbox("Técnico", ["Admin", "Técnico 1"])
             r7, r8, r9 = st.columns(3)
-            cost = r7.number_input("Costo (S/)", 0.0)
-            clav = r8.text_input("Clave/Patrón")
-            
+            cost = r7.number_input("Costo (S/)", 0.0); clav = r8.text_input("Clave")
             obs = st.text_area("Falla / Observaciones")
 
         if st.button("💾 GENERAR ORDEN", type="primary"):
@@ -210,98 +259,102 @@ if selected == "Recepción":
                     st.success("Orden Creada"); st.rerun()
                 except Exception as e: st.error(str(e))
 
-    # --- PESTAÑA 2: LISTADO AVANZADO (DISEÑO VILLAFIX) ---
+    # PESTAÑA 2: LISTADO AVANZADO (DISEÑO VILLAFIX)
     with tab_list:
-        # BARRA DE HERRAMIENTAS (TOOLBAR)
+        # Barra de Herramientas
         with st.container():
-            st.markdown('<div class="toolbar">', unsafe_allow_html=True)
             c_filtro, c_excel = st.columns([4, 1])
-            search = c_filtro.text_input("🔍 Buscar por Cliente, DNI o Ticket", label_visibility="collapsed", placeholder="Escribe para buscar...")
+            search = c_filtro.text_input("🔍 Buscar...", placeholder="Cliente, DNI o Ticket", label_visibility="collapsed")
             
-            # Obtener datos
             q = supabase.table("tickets").select("*").order("created_at", desc=True)
             if search: q = q.ilike("cliente_nombre", f"%{search}%")
             data = q.execute().data
             
             if data:
                 excel = to_excel(pd.DataFrame(data))
-                c_excel.download_button("📗 Exportar Excel", excel, "reporte.xlsx", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+                c_excel.download_button("📗 Excel", excel, "data.xlsx", use_container_width=True)
 
-        # ENCABEZADO DE TABLA (GRIS OSCURO)
+        # Encabezado Tabla
         st.markdown("""
-        <div class="rep-container">
-            <div class="rep-header">
-                <div style="width:100px; text-align:center;">Acción</div>
-                <div style="width:120px; text-align:center;">Estado</div>
-                <div class="rep-col">Cliente</div>
-                <div class="rep-col">Equipo / Motivo</div>
-                <div class="rep-col">Técnico</div>
-                <div class="rep-col" style="text-align:right;">Saldo</div>
-                <div class="rep-col" style="text-align:right;">Fechas</div>
-            </div>
+        <div class="rep-header">
+            <div style="width:50px; text-align:center;">⚙️</div>
+            <div style="width:100px; text-align:center;">Estado</div>
+            <div class="rep-col">Cliente</div>
+            <div class="rep-col">Información</div>
+            <div class="rep-col">Técnico</div>
+            <div class="rep-col" style="text-align:right;">Monto</div>
+            <div class="rep-col" style="text-align:right;">Fechas</div>
         </div>
         """, unsafe_allow_html=True)
 
-        # FILAS DE DATOS (CON BOTÓN DE ACCIÓN REAL)
+        # Filas
         if data:
             for t in data:
-                # Lógica de Colores
                 if t['estado'] == 'Anulado': bg = "bg-red"; st_txt = "ANULADO"
-                elif t['saldo'] <= 0: bg = "bg-green"; st_txt = "ENTREGADO"
-                else: bg = "bg-blue"; st_txt = "EN TALLER"
+                elif t['saldo'] <= 0: bg = "bg-green"; st_txt = "PAGADO"
+                else: bg = "bg-blue"; st_txt = "PENDIENTE"
 
                 f_ing = datetime.fromisoformat(t['created_at']).strftime("%d/%m")
                 f_ent = t['fecha_entrega'] if t['fecha_entrega'] else "-"
 
-                # Diseño de Fila (Mix HTML + Streamlit Columns para el botón)
-                col_ui, col_btn = st.columns([0.1, 0.9]) # Pequeña columna invisible para alineación
+                # Fila Híbrida (Columnas Streamlit + HTML)
+                col_btn, col_info = st.columns([0.8, 11])
                 
-                with st.container():
-                    # Usamos columnas de Streamlit para poder meter el botón nativo
-                    c_btn, c_info = st.columns([1.5, 10])
-                    
-                    with c_btn:
-                        # EL BOTÓN DE ENGRANAJE (Acción Principal)
-                        if st.button("⚙️", key=f"act_{t['id']}", help="Gestionar Orden"):
-                            gestion_modal(t)
-                    
-                    with c_info:
-                        # El resto de la info en HTML bonito
-                        html_row = f"""
-                        <div class="rep-row" style="margin-left:-15px;">
-                            <div style="width:120px; text-align:center;">
-                                <span class="badge {bg}">{st_txt}</span>
-                            </div>
-                            <div class="rep-col">
-                                <div><strong>#{t['id']}</strong></div>
-                                <div>{t['cliente_nombre'].split()[0]}</div>
-                                <div style="font-size:0.8em; color:#64748b;">{t['cliente_dni']}</div>
-                            </div>
-                            <div class="rep-col">
-                                <div><strong>{t['modelo']}</strong></div>
-                                <div>{t['marca']}</div>
-                                <div style="font-size:0.8em;">{t['motivo']}</div>
-                            </div>
-                            <div class="rep-col">
-                                <div>{t['vendedor_nombre']}</div>
-                                <div style="font-size:0.8em;">Clave: {t['contrasena']}</div>
-                            </div>
-                            <div class="rep-col" style="text-align:right;">
-                                <div style="color:#ef4444; font-weight:bold;">S/ {t['saldo']:.2f}</div>
-                                <div style="font-size:0.8em;">Total: {t['precio']:.2f}</div>
-                            </div>
-                            <div class="rep-col" style="text-align:right;">
-                                <div>In: {f_ing}</div>
-                                <div>Out: {f_ent}</div>
-                            </div>
+                with col_btn:
+                    st.write("") # Espaciado vertical
+                    if st.button("⚙️", key=f"btn_{t['id']}", help="Gestionar"):
+                        gestion_modal(t)
+                
+                with col_info:
+                    st.markdown(f"""
+                    <div class="rep-card">
+                        <div style="width:100px; text-align:center; margin-right:10px;">
+                            <span class="badge {bg}">{st_txt}</span>
                         </div>
-                        """
-                        st.markdown(html_row, unsafe_allow_html=True)
+                        <div class="rep-col">
+                            <strong>{t['cliente_nombre'].split()[0]}</strong>
+                            <span>{t['cliente_dni']}</span>
+                        </div>
+                        <div class="rep-col">
+                            <strong>{t['modelo']}</strong>
+                            <span>{t['marca']}</span>
+                        </div>
+                        <div class="rep-col">
+                            <strong>{t['vendedor_nombre']}</strong>
+                            <span>Clave: {t['contrasena']}</span>
+                        </div>
+                        <div class="rep-col" style="text-align:right;">
+                            <strong style="color:#ef4444;">S/ {t['saldo']:.2f}</strong>
+                            <span>Total: {t['precio']:.2f}</span>
+                        </div>
+                        <div class="rep-col" style="text-align:right;">
+                            <strong>In: {f_ing}</strong>
+                            <span>Out: {f_ent}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
         else:
-            st.info("No hay reparaciones registradas.")
+            st.info("Sin registros.")
 
-# (Resto de módulos simplificados para no exceder longitud)
-elif selected == "Dashboard": pass
-elif selected == "Inventario": pass
-elif selected == "Config": pass
+# === INVENTARIO ===
+elif selected == "Inventario":
+    st.markdown("### 📦 Inventario")
+    t1, t2 = st.tabs(["Ver Stock", "Nuevo Producto"])
+    
+    with t1:
+        try: prods = pd.DataFrame(supabase.table("productos").select("*").execute().data)
+        except: prods = pd.DataFrame()
+        if not prods.empty: st.dataframe(prods[['nombre', 'stock', 'precio']], use_container_width=True)
+        else: st.info("Inventario vacío.")
+        
+    with t2:
+        c1, c2 = st.columns(2)
+        n = c1.text_input("Nombre"); p = c2.number_input("Precio", 0.0)
+        s = c1.number_input("Stock", 1); c = c2.number_input("Costo", 0.0)
+        if st.button("Guardar Producto"):
+            supabase.table("productos").insert({"nombre":n, "precio":p, "stock":s, "costo":c}).execute()
+            st.success("Guardado")
+
+# === CONFIG ===
+elif selected == "Config":
+    st.write("Configuración del sistema v5.0")
