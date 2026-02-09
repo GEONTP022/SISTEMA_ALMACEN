@@ -43,29 +43,29 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB; text-align: center;
     }
     
-    /* ESTILOS DE TARJETAS DE TICKETS (MEJORADO) */
+    /* ESTILOS DE TARJETAS DE TICKETS (NUEVO DISEÑO) */
     .ticket-card {
-        background-color: white; padding: 12px; border-radius: 8px;
-        border: 1px solid #e5e7eb; margin-bottom: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        background-color: white; padding: 12px; border-radius: 10px;
+        border: 1px solid #e5e7eb; margin-bottom: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.04);
+        font-family: sans-serif;
     }
     
-    /* ETIQUETAS DE ESTADO (CUADROS) */
+    /* ETIQUETAS DE ESTADO */
     .status-box {
-        display: inline-block; padding: 4px 8px; border-radius: 6px;
-        font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px;
-        text-transform: uppercase;
+        display: inline-block; padding: 3px 8px; border-radius: 6px;
+        font-size: 0.7rem; font-weight: 800; text-transform: uppercase; float: right;
     }
-    
-    /* VERDE (Pagado) */
     .box-green { background-color: #dcfce7; color: #166534; border: 1px solid #22c55e; }
-    
-    /* ROJO (Deuda) */
     .box-red { background-color: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
-    
-    /* GRIS (Anulado) */
     .box-grey { background-color: #f3f4f6; color: #4b5563; border: 1px solid #9ca3af; text-decoration: line-through; }
 
+    /* DATOS ORGANIZADOS */
+    .meta-info { font-size: 0.8em; color: #555; margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .meta-item { background: #f8f9fa; padding: 2px 6px; border-radius: 4px; border: 1px solid #eee; }
+    
+    .price-date { text-align: right; font-size: 0.85em; margin-top: 8px; border-top: 1px solid #eee; padding-top: 5px; }
+    
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -148,7 +148,7 @@ def subir_imagen(archivo):
         return supabase.storage.from_("fotos_productos").get_public_url(f)
     except: return None
 
-# --- VENTANA FLOTANTE (MODAL) ---
+# --- VENTANA FLOTANTE ---
 @st.dialog("Gestión de Ticket")
 def mostrar_modal_ticket(t):
     col_a, col_b = st.columns([2,1])
@@ -156,19 +156,14 @@ def mostrar_modal_ticket(t):
         st.write(f"👤 **{t['cliente_nombre']}**")
         st.caption(f"DNI: {t['cliente_dni']}")
     with col_b:
-        # Estado en el modal
-        if t['estado'] == "Anulado":
-            st.error("ANULADO")
-        elif t['saldo'] <= 0:
-            st.success("PAGADO")
-        else:
-            st.warning(f"DEBE S/{t['saldo']}")
+        if t['estado'] == "Anulado": st.error("ANULADO")
+        elif t['saldo'] <= 0: st.success("PAGADO")
+        else: st.warning(f"DEBE S/{t['saldo']}")
     
     st.divider()
     st.write(f"📱 **Equipo:** {t['marca']} {t['modelo']}")
     st.caption(f"Falla: {t['descripcion']}")
     
-    # PESTAÑAS DE ACCIÓN
     tab_ver, tab_pagar, tab_anular = st.tabs(["🖨️ Ver Ticket", "💰 Cobrar", "🚫 Anular"])
     
     with tab_ver:
@@ -176,21 +171,19 @@ def mostrar_modal_ticket(t):
         st.download_button("📥 Descargar PDF (80mm)", pdf, file_name=f"Ticket_{t['id']}.pdf", mime="application/pdf", use_container_width=True)
 
     with tab_pagar:
-        if t['estado'] == "Anulado":
-            st.error("No se puede cobrar un ticket anulado.")
-        elif t['saldo'] <= 0:
-            st.success("✅ Este ticket ya está PAGADO.")
+        if t['estado'] == "Anulado": st.error("Anulado.")
+        elif t['saldo'] <= 0: st.success("✅ PAGADO.")
         else:
             st.metric("Deuda Pendiente", f"S/ {t['saldo']:.2f}")
-            metodo_fin = st.selectbox("Método de Pago Final", ["Yape", "Plin", "Efectivo", "Tarjeta"])
-            if st.button("CONFIRMAR PAGO TOTAL", type="primary", use_container_width=True):
+            metodo = st.selectbox("Medio de Pago", ["Yape", "Plin", "Efectivo", "Tarjeta"])
+            if st.button("CONFIRMAR PAGO FINAL", type="primary", use_container_width=True):
                 supabase.table("tickets").update({
-                    "saldo": 0, "acuenta": t['precio'], "metodo_pago": metodo_fin, "estado": "Entregado"
+                    "saldo": 0, "acuenta": t['precio'], "metodo_pago": metodo, "estado": "Entregado"
                 }).eq("id", t['id']).execute()
                 st.rerun()
 
     with tab_anular:
-        st.warning("¿Cancelar este servicio? (Irreversible)")
+        st.warning("¿Cancelar este servicio?")
         if st.button("Sí, Anular Ticket", type="secondary", use_container_width=True):
             supabase.table("tickets").update({"estado": "Anulado"}).eq("id", t['id']).execute()
             st.rerun()
@@ -206,15 +199,9 @@ with st.sidebar:
         default_index=1,
     )
 
-# Limpieza automática
 if 'last_tab' not in st.session_state: st.session_state.last_tab = selected
 if st.session_state.last_tab != selected:
-    st.session_state.recepcion_step = 1
-    st.session_state.temp_data = {}
-    st.session_state.cli_nombre = ""
-    st.session_state.last_tab = selected
-    st.rerun()
-
+    st.session_state.recepcion_step = 1; st.session_state.temp_data = {}; st.session_state.cli_nombre = ""; st.session_state.last_tab = selected; st.rerun()
 if 'recepcion_step' not in st.session_state: st.session_state.recepcion_step = 1
 if 'temp_data' not in st.session_state: st.session_state.temp_data = {}
 
@@ -241,7 +228,6 @@ elif selected == "Recepción":
             st.markdown("### 🛠️ Nuevo Servicio")
             st.caption("Paso 1: Datos del Cliente y Equipo")
             if 'cli_nombre' not in st.session_state: st.session_state.cli_nombre = ""
-            
             c_dni, c_btn = st.columns([3, 1])
             dni = c_dni.text_input("DNI Cliente", placeholder="8 dígitos")
             if c_btn.button("🔍"):
@@ -251,12 +237,10 @@ elif selected == "Recepción":
                     nom = consultar_dni_reniec(dni)
                     if nom: st.session_state.cli_nombre = nom; st.toast("RENIEC OK")
                     else: st.warning("No encontrado")
-
             nombre = st.text_input("Nombre *", value=st.session_state.cli_nombre)
             c1, c2 = st.columns(2)
             tel = c1.text_input("Teléfono")
             dir_cli = c2.text_input("Dirección")
-            
             st.markdown("---")
             c_eq1, c_eq2 = st.columns(2)
             marca = c_eq1.text_input("Marca *", placeholder="Ej: Samsung")
@@ -267,17 +251,11 @@ elif selected == "Recepción":
             precio = c_eq2.number_input("Costo Total (S/)", min_value=0.0, step=5.0)
             desc = st.text_area("Falla / Detalles *", height=80)
             fecha_ent = st.date_input("Fecha Entrega", min_value=date.today())
-
             if st.button("➡️ CONTINUAR AL PAGO", type="primary", use_container_width=True):
                 if not dni or not nombre or not marca or not modelo: st.error("❌ Faltan datos obligatorios")
                 else:
-                    st.session_state.temp_data = {
-                        "dni": dni, "nombre": nombre.upper(), "tel": tel, "dir": dir_cli,
-                        "marca": marca.upper(), "modelo": modelo.upper(), "imei": imei,
-                        "pass": passw, "motivo": motivo, "precio": precio, "desc": desc, "fecha": str(fecha_ent)
-                    }
-                    st.session_state.recepcion_step = 2
-                    st.rerun()
+                    st.session_state.temp_data = {"dni": dni, "nombre": nombre.upper(), "tel": tel, "dir": dir_cli, "marca": marca.upper(), "modelo": modelo.upper(), "imei": imei, "pass": passw, "motivo": motivo, "precio": precio, "desc": desc, "fecha": str(fecha_ent)}
+                    st.session_state.recepcion_step = 2; st.rerun()
 
         elif st.session_state.recepcion_step == 2:
             data = st.session_state.temp_data
@@ -291,32 +269,16 @@ elif selected == "Recepción":
                 cm, co = st.columns(2)
                 metodo = cm.selectbox("Método", ["Yape", "Plin", "Efectivo", "Tarjeta"])
                 operacion = co.text_input("N° Operación")
-                
                 def guardar(fin_acu, fin_met):
                     try:
-                        try:
-                            supabase.table("clientes").insert({
-                                "dni": data['dni'], "nombre": data['nombre'], "telefono": data['tel'], "direccion": data['dir']
-                            }).execute()
+                        try: supabase.table("clientes").insert({"dni": data['dni'], "nombre": data['nombre'], "telefono": data['tel'], "direccion": data['dir']}).execute()
                         except: pass
-                        
-                        res = supabase.table("tickets").insert({
-                            "cliente_dni": data['dni'], "cliente_nombre": data['nombre'],
-                            "marca": data['marca'], "modelo": data['modelo'], "imei": data['imei'],
-                            "contrasena": data['pass'], "motivo": data['motivo'], "descripcion": data['desc'],
-                            "precio": data['precio'], "fecha_entrega": data['fecha'],
-                            "acuenta": fin_acu, "saldo": data['precio']-fin_acu, 
-                            "metodo_pago": fin_met, "cod_operacion": operacion if fin_acu > 0 else "",
-                            "estado": "Pendiente"
-                        }).execute()
+                        res = supabase.table("tickets").insert({"cliente_dni": data['dni'], "cliente_nombre": data['nombre'], "marca": data['marca'], "modelo": data['modelo'], "imei": data['imei'], "contrasena": data['pass'], "motivo": data['motivo'], "descripcion": data['desc'], "precio": data['precio'], "fecha_entrega": data['fecha'], "acuenta": fin_acu, "saldo": data['precio']-fin_acu, "metodo_pago": fin_met, "cod_operacion": operacion if fin_acu > 0 else "", "estado": "Pendiente"}).execute()
                         if res.data:
                             tid = res.data[0]['id']
                             st.session_state.updf = generar_ticket_termico({**data, "id": tid, "cliente_nombre": data['nombre'], "cliente_dni": data['dni'], "acuenta": fin_acu, "saldo": data['precio']-fin_acu, "metodo_pago": fin_met})
-                            st.session_state.uid = tid
-                            st.session_state.recepcion_step = 3
-                            st.rerun()
+                            st.session_state.uid = tid; st.session_state.recepcion_step = 3; st.rerun()
                     except Exception as e: st.error(f"Error: {e}")
-
                 cp, co = st.columns(2)
                 with cp:
                     if st.button("💾 CONFIRMAR PAGO", type="primary", use_container_width=True): guardar(acuenta, metodo)
@@ -331,7 +293,7 @@ elif selected == "Recepción":
             if st.button("➕ NUEVO CLIENTE (Limpiar)", use_container_width=True):
                 st.session_state.recepcion_step = 1; st.session_state.temp_data = {}; st.session_state.cli_nombre = ""; st.rerun()
 
-    # --- LISTA DE TICKETS (DERECHA - MEJORADA) ---
+    # --- LIVE FEED (DISEÑO SOLICITADO) ---
     with col_feed:
         st.markdown("### ⏱️ Tickets de Hoy")
         search = st.text_input("🔎 Buscar...", placeholder="DNI o Ticket")
@@ -342,33 +304,54 @@ elif selected == "Recepción":
         tickets = q.order("created_at", desc=True).execute().data
         if tickets:
             for t in tickets:
-                # LOGICA DE ESTADO
+                # LOGICA DE ESTADO (ETIQUETA DE COLOR)
                 if t['estado'] == "Anulado":
-                    estado_html = '<span class="status-box box-grey">🚫 ANULADO</span>'
-                    estilo_nombre = "text-decoration: line-through; color: #888;"
+                    status_html = '<span class="status-box box-grey">🚫 ANULADO</span>'
                 elif t['saldo'] <= 0:
-                    estado_html = '<span class="status-box box-green">✅ PAGADO</span>'
-                    estilo_nombre = "color: #000;"
+                    status_html = '<span class="status-box box-green">✅ PAGADO</span>'
                 else:
-                    estado_html = f'<span class="status-box box-red">⚠️ DEBE S/{t["saldo"]}</span>'
-                    estilo_nombre = "color: #000;"
+                    status_html = f'<span class="status-box box-red">⚠️ DEBE</span>'
 
-                # HTML PERSONALIZADO DE LA TARJETA
+                # Formatear fecha
+                try: 
+                    fecha_str = datetime.fromisoformat(t['created_at']).strftime("%d/%m %H:%M")
+                except: fecha_str = "Hoy"
+
+                # Obtener teléfono (consulta rápida)
+                tel_display = "Sin Tlf"
+                try:
+                    c_res = supabase.table("clientes").select("telefono").eq("dni", t['cliente_dni']).execute()
+                    if c_res.data and c_res.data[0]['telefono']: tel_display = c_res.data[0]['telefono']
+                except: pass
+
+                # HTML DE LA TARJETA (ORGANIZADO COMO PEDISTE)
                 with st.container():
                     st.markdown(f"""
                     <div class="ticket-card">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span style="font-weight:bold; {estilo_nombre}">#{t['id']} {t['cliente_nombre'].split(' ')[0]}</span>
-                            {estado_html}
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <b style="font-size:1.05em;">#{t['id']} {t['cliente_nombre']}</b>
+                            {status_html}
                         </div>
-                        <div style="font-size:0.85em; color:#555;">
-                            📱 <b>{t['marca']}</b> {t['modelo']}<br>
+                        
+                        <div class="meta-info">
+                            <span class="meta-item">🆔 {t['cliente_dni']}</span>
+                            <span class="meta-item">📞 {tel_display}</span>
+                            <span class="meta-item">🔑 {t['contrasena']}</span>
+                        </div>
+                        
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:8px; border-top:1px solid #f0f0f0; padding-top:5px;">
+                            <div style="color:#333; font-size:0.9em;">
+                                📱 <b>{t['marca']} {t['modelo']}</b>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-weight:bold; color:#2563EB; font-size:1em;">S/ {t['precio']:.2f}</div>
+                                <div style="color:#888; font-size:0.75em;">{fecha_str}</div>
+                            </div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # BOTONES DE ACCIÓN
-                    if st.button("👁️ VER / GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
+                    if st.button("👁️ GESTIONAR", key=f"btn_{t['id']}", use_container_width=True):
                         mostrar_modal_ticket(t)
         else: st.info("Sin movimientos.")
 
@@ -385,10 +368,8 @@ elif selected == "Inventario":
             for i, r in enumerate(data):
                 with cols[i%3]:
                     with st.container(border=True):
-                        if r['imagen_url']:
-                            st.image(r['imagen_url'], use_container_width=True)
-                        else:
-                            st.markdown("🖼️ *Sin imagen*")
+                        if r['imagen_url']: st.image(r['imagen_url'], use_container_width=True)
+                        else: st.markdown("🖼️ *Sin imagen*")
                         st.write(f"**{r['nombre']}**")
                         st.caption(f"Stock: {r['stock']} | S/ {r['precio']}")
     with t2:
@@ -402,4 +383,4 @@ elif selected == "Inventario":
                 st.success("Guardado")
 
 elif selected == "Config":
-    st.title("⚙️ Configuración"); st.write("v3.4 Final")
+    st.title("⚙️ Configuración"); st.write("v3.5 Final")
