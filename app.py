@@ -36,20 +36,17 @@ st.markdown("""
     .stApp { background-color: #f8f9fa; }
     h1, h2, h3, h4 { color: #1e293b !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
     
-    /* Inputs Estilizados */
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
         background-color: white !important; color: #1e293b !important; 
         border-radius: 8px; border: 1px solid #cbd5e1;
     }
     
-    /* Tarjetas */
     .metric-card {
         background: white; padding: 20px; border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB;
         text-align: center;
     }
     
-    /* Live Feed (Tickets) */
     .ticket-item { 
         background: white; padding: 15px; border-radius: 10px; 
         border: 1px solid #e2e8f0; margin-bottom: 10px; 
@@ -62,30 +59,24 @@ st.markdown("""
         border-radius: 12px; font-size: 0.75em; font-weight: bold; 
     }
     
-    /* Botones */
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES DEL SISTEMA ---
+# --- 4. FUNCIONES ---
 
 def generar_ticket_termico(t):
-    """
-    Genera un PDF formato Tira (80mm) para impresoras térmicas.
-    """
-    # Configuración de papel (80mm ancho x Largo dinámico)
+    """Genera Ticket Térmico 80mm"""
     width = 80 * mm
-    height = 297 * mm # Largo suficiente A4 vertical
-    
+    height = 297 * mm 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=(width, height))
     
-    # Márgenes
     margin = 5 * mm
-    y = height - 10 * mm # Cursor inicial
+    y = height - 10 * mm
     printable_width = width - (2 * margin)
     
-    # --- CABECERA ---
+    # CABECERA
     c.setFillColor(colors.black)
     c.setFont("Helvetica-Bold", 12)
     c.drawCentredString(width/2, y, "VILLAFIX OS")
@@ -97,13 +88,11 @@ def generar_ticket_termico(t):
     y -= 4 * mm
     c.drawCentredString(width/2, y, "WhatsApp: 999-999-999")
     y -= 6 * mm
-    
-    # Separador
     c.setLineWidth(0.5)
     c.line(margin, y, width-margin, y)
     y -= 5 * mm
     
-    # Datos del Ticket
+    # DATOS TICKET
     c.setFont("Helvetica-Bold", 14)
     c.drawCentredString(width/2, y, f"ORDEN #{t['id']}")
     y -= 5 * mm
@@ -111,12 +100,11 @@ def generar_ticket_termico(t):
     c.drawCentredString(width/2, y, f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     y -= 8 * mm
     
-    # --- CLIENTE ---
+    # CLIENTE
     c.setFont("Helvetica-Bold", 9)
     c.drawString(margin, y, "CLIENTE:")
     y -= 4 * mm
     c.setFont("Helvetica", 9)
-    # Cortar nombre si es muy largo
     nom = t['cliente_nombre']
     if len(nom) > 25: nom = nom[:25] + "..."
     c.drawString(margin, y, f"- {nom}")
@@ -124,7 +112,7 @@ def generar_ticket_termico(t):
     c.drawString(margin, y, f"- DNI: {t['cliente_dni']}")
     y -= 6 * mm
     
-    # --- EQUIPO ---
+    # EQUIPO
     c.line(margin, y, width-margin, y)
     y -= 5 * mm
     c.setFont("Helvetica-Bold", 9)
@@ -135,21 +123,17 @@ def generar_ticket_termico(t):
     c.drawString(margin, y, "IMEI/Serie:")
     c.drawRightString(width-margin, y, t['imei'] if t['imei'] else "N/A")
     y -= 5 * mm
-    
     c.setFont("Helvetica-Bold", 9)
-    c.drawString(margin, y, "FALLA REPORTADA:")
+    c.drawString(margin, y, "FALLA:")
     y -= 4 * mm
     c.setFont("Helvetica", 9)
-    
-    # Texto multilinea para la descripción
     lines = textwrap.wrap(t['descripcion'], width=32)
     for line in lines:
         c.drawString(margin, y, line)
         y -= 4 * mm
-    
     y -= 2 * mm
     
-    # --- FINANCIERO (CAJA) ---
+    # FINANCIERO
     c.setDash(1, 2)
     c.line(margin, y, width-margin, y)
     c.setDash([])
@@ -164,7 +148,6 @@ def generar_ticket_termico(t):
     c.drawRightString(width-margin, y, f"S/ {t['acuenta']:.2f}")
     y -= 6 * mm
     
-    # SALDO GIGANTE
     c.setFont("Helvetica-Bold", 14)
     c.drawString(margin, y, "SALDO:")
     c.drawRightString(width-margin, y, f"S/ {t['saldo']:.2f}")
@@ -174,23 +157,18 @@ def generar_ticket_termico(t):
     c.drawCentredString(width/2, y, f"Pago: {t['metodo_pago']}")
     y -= 10 * mm
     
-    # --- QR y PIE ---
+    # QR y PIE
     qr_data = f"TICKET-{t['id']}|SALDO:{t['saldo']}"
     qr = qrcode.make(qr_data)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
         qr.save(tmp.name)
-        # Centrar QR
         qr_size = 30 * mm
         c.drawImage(tmp.name, (width-qr_size)/2, y-qr_size, width=qr_size, height=qr_size)
         os.unlink(tmp.name)
         
     y -= (qr_size + 5 * mm)
-    
     c.setFont("Helvetica", 7)
     c.drawCentredString(width/2, y, "Garantía válida por 30 días.")
-    y -= 3 * mm
-    c.drawCentredString(width/2, y, "No cubre pantallas mojadas/rotas.")
-    
     c.showPage()
     c.save()
     buffer.seek(0)
@@ -220,8 +198,7 @@ def subir_imagen(archivo):
         return supabase.storage.from_("fotos_productos").get_public_url(f)
     except: return None
 
-# --- 5. INTERFAZ PRINCIPAL ---
-
+# --- 5. INTERFAZ ---
 with st.sidebar:
     st.markdown("<h2 style='text-align: center; color: #fff;'>VillaFix OS</h2>", unsafe_allow_html=True)
     st.markdown("---")
@@ -229,7 +206,7 @@ with st.sidebar:
         menu_title=None,
         options=["Dashboard", "Recepción", "Inventario", "Config"],
         icons=["speedometer2", "hdd-network", "box-seam", "gear"],
-        default_index=1, # Inicia en Recepción por defecto
+        default_index=1,
         styles={
             "container": {"padding": "0!important", "background-color": "#262b3d"},
             "icon": {"color": "white", "font-size": "18px"}, 
@@ -238,7 +215,6 @@ with st.sidebar:
         }
     )
 
-# --- ESTADOS DE SESIÓN ---
 if 'recepcion_step' not in st.session_state: st.session_state.recepcion_step = 1
 if 'temp_data' not in st.session_state: st.session_state.temp_data = {}
 
@@ -259,19 +235,16 @@ if selected == "Dashboard":
     col4.markdown(f'<div class="metric-card"><h3>💰 S/ 0</h3><p>Caja Hoy</p></div>', unsafe_allow_html=True)
 
 elif selected == "Recepción":
-    # Layout Principal: 60% Formulario | 40% Live Feed
     col_form, col_feed = st.columns([1.5, 1])
 
     with col_form:
-        # === PASO 1: DATOS (Ingreso) ===
+        # === PASO 1: DATOS ===
         if st.session_state.recepcion_step == 1:
             st.markdown("### 🛠️ Nuevo Servicio")
-            st.caption("Complete los datos del cliente y equipo.")
+            st.caption("Paso 1: Datos del Cliente y Equipo")
             
-            # Variables locales
             if 'cli_nombre' not in st.session_state: st.session_state.cli_nombre = ""
             
-            # Búsqueda DNI
             c_dni, c_btn = st.columns([3, 1])
             dni = c_dni.text_input("DNI Cliente", placeholder="8 dígitos")
             if c_btn.button("🔍"):
@@ -284,13 +257,12 @@ elif selected == "Recepción":
                     if nom: st.session_state.cli_nombre = nom; st.toast("RENIEC OK")
                     else: st.warning("No encontrado")
 
-            nombre = st.text_input("Nombre Completo *", value=st.session_state.cli_nombre)
+            nombre = st.text_input("Nombre *", value=st.session_state.cli_nombre)
             c1, c2 = st.columns(2)
-            tel = c1.text_input("Teléfono / WhatsApp")
+            tel = c1.text_input("Teléfono (Opcional)")
             dir_cli = c2.text_input("Dirección (Opcional)")
             
             st.markdown("---")
-            # Datos Equipo
             c_eq1, c_eq2 = st.columns(2)
             marca = c_eq1.text_input("Marca *", placeholder="Ej: Samsung")
             modelo = c_eq1.text_input("Modelo *", placeholder="Ej: A54")
@@ -298,7 +270,6 @@ elif selected == "Recepción":
             imei = c_eq2.text_input("IMEI / Serie")
             passw = c_eq2.text_input("Contraseña *", placeholder="Patrón o Clave")
             precio = c_eq2.number_input("Costo Total (S/)", min_value=0.0, step=5.0)
-            
             desc = st.text_area("Falla / Detalles *", height=80)
             fecha_ent = st.date_input("Fecha Entrega", min_value=date.today())
 
@@ -306,7 +277,6 @@ elif selected == "Recepción":
                 if not dni or not nombre or not marca or not modelo or not passw:
                     st.error("❌ Faltan datos obligatorios")
                 else:
-                    # Guardar en memoria y pasar al paso 2
                     st.session_state.temp_data = {
                         "dni": dni, "nombre": nombre.upper(), "tel": tel, "dir": dir_cli,
                         "marca": marca.upper(), "modelo": modelo.upper(), "imei": imei,
@@ -316,60 +286,68 @@ elif selected == "Recepción":
                     st.session_state.recepcion_step = 2
                     st.rerun()
 
-        # === PASO 2: CAJA (Cobro y Ticket) ===
+        # === PASO 2: CAJA (OPCIONAL) ===
         elif st.session_state.recepcion_step == 2:
             data = st.session_state.temp_data
             st.markdown(f"### 💰 Caja: {data['nombre']}")
             
-            # Resumen
-            c_tot, c_acu, c_pen = st.columns(3)
-            c_tot.metric("Total", f"S/ {data['precio']:.2f}")
+            c_tot, c_pen = st.columns(2)
+            c_tot.metric("Total a Pagar", f"S/ {data['precio']:.2f}")
             
             with st.container(border=True):
-                acuenta = st.number_input("Monto a Cuenta (Adelanto) *", min_value=0.0, max_value=data['precio'], step=5.0)
+                st.info("¿El cliente deja un adelanto?")
+                
+                acuenta = st.number_input("Monto Adelanto (S/)", min_value=0.0, max_value=data['precio'], step=5.0)
                 saldo = data['precio'] - acuenta
+                c_pen.metric("Saldo Pendiente", f"S/ {saldo:.2f}", delta_color="inverse" if saldo > 0 else "normal")
                 
-                c_acu.metric("A Cuenta", f"S/ {acuenta:.2f}")
-                c_pen.metric("Saldo", f"S/ {saldo:.2f}", delta_color="inverse" if saldo > 0 else "normal")
-                
-                st.write("")
                 cm, co = st.columns(2)
                 metodo = cm.selectbox("Método Pago", ["Yape", "Plin", "Efectivo", "Tarjeta"])
                 operacion = co.text_input("N° Operación", placeholder="Opcional")
                 
-                if st.button("🖨️ CONFIRMAR Y GENERAR TICKET", type="primary", use_container_width=True):
+                # Función interna para guardar
+                def guardar_ticket(final_acuenta, final_metodo):
                     try:
-                        # 1. Guardar Cliente
+                        # Cliente
                         try:
                             supabase.table("clientes").insert({
                                 "dni": data['dni'], "nombre": data['nombre'], "telefono": data['tel'], "direccion": data['dir']
                             }).execute()
                         except: pass
                         
-                        # 2. Guardar Ticket
+                        # Ticket
+                        final_saldo = data['precio'] - final_acuenta
                         ticket_final = {
                             "cliente_dni": data['dni'], "cliente_nombre": data['nombre'],
                             "marca": data['marca'], "modelo": data['modelo'],
                             "imei": data['imei'], "contrasena": data['pass'],
                             "motivo": data['motivo'], "descripcion": data['desc'],
                             "precio": data['precio'], "fecha_entrega": data['fecha'],
-                            "acuenta": acuenta, "saldo": saldo, 
-                            "metodo_pago": metodo, "cod_operacion": operacion,
+                            "acuenta": final_acuenta, "saldo": final_saldo, 
+                            "metodo_pago": final_metodo, "cod_operacion": operacion if final_acuenta > 0 else "",
                             "estado": "Pendiente"
                         }
                         res_t = supabase.table("tickets").insert(ticket_final).execute()
                         
-                        # 3. Generar PDF
                         if res_t.data:
                             t_id = res_t.data[0]['id']
                             ticket_final['id'] = t_id
-                            
                             st.session_state.ultimo_pdf = generar_ticket_termico(ticket_final)
                             st.session_state.ultimo_id = t_id
                             st.session_state.recepcion_step = 3
                             st.rerun()
-                            
                     except Exception as e: st.error(f"Error: {e}")
+
+                # DOS BOTONES DE ACCIÓN
+                col_pay, col_skip = st.columns([1.5, 1])
+                
+                with col_pay:
+                    if st.button("💾 CONFIRMAR ADELANTO", type="primary", use_container_width=True):
+                        guardar_ticket(acuenta, metodo)
+                        
+                with col_skip:
+                    if st.button("⏩ OMITIR PAGO (Pagar al Recoger)", use_container_width=True):
+                        guardar_ticket(0.00, "Contra-entrega") # Fuerza 0 adelanto
 
             if st.button("⬅️ Editar datos"):
                 st.session_state.recepcion_step = 1
@@ -394,7 +372,7 @@ elif selected == "Recepción":
                 st.session_state.temp_data = {}
                 st.rerun()
 
-    # --- LIVE FEED (Derecha) ---
+    # --- LIVE FEED ---
     with col_feed:
         st.markdown("### ⏱️ Hoy")
         search = st.text_input("🔎 Buscar...", placeholder="DNI o Ticket")
@@ -423,7 +401,6 @@ elif selected == "Recepción":
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Botón WhatsApp
                 res_tel = supabase.table("clientes").select("telefono").eq("dni", t['cliente_dni']).execute()
                 tel = res_tel.data[0]['telefono'] if res_tel.data else ""
                 if tel:
