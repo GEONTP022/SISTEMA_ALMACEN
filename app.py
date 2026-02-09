@@ -28,13 +28,12 @@ st.markdown("""
 <style>
     .stApp { background-color: #f4f6f9; }
     h1, h2, h3, h4, h5, p, div, span, label, li { color: #212529 !important; }
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input { 
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stDateInput>div>div>input, .stSelectbox>div>div>div { 
         background-color: #ffffff !important; 
         color: #212529 !important; 
         border: 1px solid #ced4da;
         border-radius: 6px;
     }
-    .stSelectbox>div>div>div { background-color: #ffffff !important; color: #212529 !important; }
     .dashboard-card {
         padding: 20px; border-radius: 12px; color: white !important;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 15px;
@@ -44,6 +43,9 @@ st.markdown("""
     .card-blue { background-color: #17a2b8; }
     .card-yellow { background-color: #ffc107; color: #333 !important; }
     .stButton>button { border-radius: 6px; font-weight: 600; width: 100%; }
+    
+    /* Estilo para mensajes de error pequeños */
+    .small-error { color: #dc3545; font-size: 0.85rem; margin-top: -10px; margin-bottom: 10px; font-weight: bold;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,152 +109,185 @@ if selected == "Dashboard":
     try:
         count_prod = supabase.table("productos").select("id", count="exact").execute().count
         count_cli = supabase.table("clientes").select("id", count="exact").execute().count
-    except: count_prod = 0; count_cli = 0
+        count_tickets = supabase.table("tickets").select("id", count="exact").eq("estado", "Pendiente").execute().count
+    except: count_prod = 0; count_cli = 0; count_tickets = 0
 
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(f'<div class="dashboard-card card-green"><h3>👥 {count_cli}</h3><p>Clientes</p></div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="dashboard-card card-orange"><h3>📦 {count_prod}</h3><p>Productos</p></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="dashboard-card card-blue"><h3>🔧 0</h3><p>Tickets Activos</p></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="dashboard-card card-blue"><h3>🔧 {count_tickets}</h3><p>En Reparación</p></div>', unsafe_allow_html=True)
     c4.markdown(f'<div class="dashboard-card card-yellow"><h3>💰 S/ 0</h3><p>Ingresos</p></div>', unsafe_allow_html=True)
 
-    # (Aquí irían los gráficos igual que antes, los omito por brevedad pero puedes dejarlos)
-
-# === PÁGINA: RECEPCIÓN (CLIENTES + TICKETS) ===
+# === PÁGINA: RECEPCIÓN (VALIDACIÓN EN SU SITIO) ===
 elif selected == "Recepción":
-    st.markdown("### 📝 Recepción de Equipos")
+    st.markdown("### 📝 Nueva Orden de Servicio")
     
-    t_ingreso, t_historial = st.tabs(["🆕 Nuevo Ingreso", "📋 Historial Tickets"])
+    t_ingreso, t_historial = st.tabs(["🆕 Nuevo Ticket", "📋 Historial"])
     
     with t_ingreso:
-        # --- SECCIÓN 1: DATOS DEL CLIENTE (ARRIBA) ---
-        st.markdown("#### 1. Datos del Cliente")
+        # --- 1. DATOS DEL CLIENTE (ARRIBA) ---
+        st.caption("👤 DATOS DEL CLIENTE")
         with st.container(border=True):
             if 'nombre_cliente' not in st.session_state: st.session_state.nombre_cliente = ""
             if 'dni_cliente' not in st.session_state: st.session_state.dni_cliente = ""
 
             c_dni, c_btn, c_cls = st.columns([3, 1, 0.5])
-            dni_input = c_dni.text_input("DNI", value=st.session_state.dni_cliente, placeholder="Ingrese DNI")
-            
-            # Reset si cambia el DNI
+            dni_input = c_dni.text_input("DNI *", value=st.session_state.dni_cliente, placeholder="Ingrese DNI")
+            err_dni = st.empty() # Placeholder para error de DNI
+
             if dni_input != st.session_state.dni_cliente:
                 st.session_state.dni_cliente = dni_input
                 st.session_state.nombre_cliente = ""
 
-            if c_btn.button("🔍 Buscar Cliente"):
+            if c_btn.button("🔍 Buscar"):
                 if len(dni_input) == 8:
-                    # 1. BD Local
                     res_db = supabase.table("clientes").select("*").eq("dni", dni_input).execute()
                     if res_db.data:
                         st.session_state.nombre_cliente = res_db.data[0]["nombre"]
-                        st.toast("Cliente Frecuente encontrado", icon="✅")
+                        st.toast("Cliente Frecuente", icon="✅")
                     else:
-                        # 2. RENIEC
-                        with st.spinner("Consultando RENIEC..."):
+                        with st.spinner("Buscando en RENIEC..."):
                             nom = consultar_dni_reniec(dni_input)
-                            if nom: 
-                                st.session_state.nombre_cliente = nom
-                                st.toast("Datos de RENIEC cargados", icon="📡")
-                            else: st.warning("No encontrado. Ingrese manual.")
-                else: st.warning("DNI inválido")
+                            if nom: st.session_state.nombre_cliente = nom
+                            else: st.warning("No encontrado")
+                else: err_dni.error("⚠️ DNI debe tener 8 dígitos")
             
             if c_cls.button("🗑️"):
                 st.session_state.dni_cliente = ""; st.session_state.nombre_cliente = ""; st.rerun()
 
-            # Campos Cliente
             nombre = st.text_input("Nombre Completo *", value=st.session_state.nombre_cliente)
+            err_nombre = st.empty() # Placeholder error nombre
+
             c_tel, c_dir = st.columns(2)
             telefono = c_tel.text_input("Teléfono / WhatsApp *")
+            err_telefono = st.empty()
             direccion = c_dir.text_input("Dirección")
 
-        st.write("") # Espacio
-
-        # --- SECCIÓN 2: DATOS DEL EQUIPO / TICKET (ABAJO) ---
-        st.markdown("#### 2. Datos del Equipo (Ticket)")
-        with st.form("form_ticket"):
-            with st.container():
-                col_eq1, col_eq2 = st.columns(2)
-                with col_eq1:
-                    marca = st.text_input("Marca *", placeholder="Ej: Samsung, Apple")
-                    modelo = st.text_input("Modelo *", placeholder="Ej: A54, iPhone 11")
-                    imei = st.text_input("IMEI (Opcional)", placeholder="Escanee o digite")
+        st.write("") 
+        
+        # --- 2. DATOS DEL TICKET (ABAJO) ---
+        st.caption("🔧 DATOS DEL EQUIPO & SERVICIO")
+        
+        # Usamos contenedores para organizar, NO st.form para poder validar en vivo
+        with st.container(border=True):
+            col_eq1, col_eq2 = st.columns(2)
+            
+            with col_eq1:
+                marca = st.text_input("Marca *", placeholder="Ej: Samsung")
+                err_marca = st.empty() # <--- Aquí saldrá el error rojo si falta marca
                 
-                with col_eq2:
-                    contrasena = st.text_input("Contraseña / Patrón *", placeholder="Clave de desbloqueo")
-                    precio = st.number_input("Costo Estimado (S/) *", min_value=0.0)
-                    fecha_entrega = st.date_input("Fecha Posible Entrega *", min_value=date.today())
+                modelo = st.text_input("Modelo *", placeholder="Ej: A54")
+                err_modelo = st.empty()
+                
+                imei = st.text_input("IMEI / Serie (Opcional)")
+                
+                # NUEVO: MOTIVO
+                motivo = st.selectbox("Motivo del Servicio *", ["Reparación", "Mantenimiento", "Garantía", "Instalación", "Otro"])
 
-                descripcion = st.text_area("Descripción de la Falla / Detalles *", height=100, placeholder="Ej: Pantalla rota, no carga, cambiar batería...")
+            with col_eq2:
+                contrasena = st.text_input("Contraseña / Patrón *", placeholder="Si no tiene, poner 'SIN CLAVE'")
+                err_contra = st.empty()
+                
+                precio = st.number_input("Costo Estimado (S/) *", min_value=0.0)
+                
+                # FECHAS
+                c_f1, c_f2 = st.columns(2)
+                fecha_recepcion = c_f1.date_input("Fecha Recepción", value=date.today())
+                fecha_entrega = c_f2.date_input("Fecha Entrega Aprox. *", value=date.today(), min_value=date.today())
 
-            st.markdown("---")
-            btn_guardar = st.form_submit_button("💾 Registrar Ingreso (Cliente + Ticket)", use_container_width=True)
+            descripcion = st.text_area("Descripción de la Falla / Detalles *", height=100)
+            err_desc = st.empty()
 
-            if btn_guardar:
-                # VALIDACIONES
-                errores = []
-                if len(dni_input) != 8: errores.append("DNI inválido")
-                if not nombre: errores.append("Falta Nombre Cliente")
-                if not marca or not modelo: errores.append("Falta Marca/Modelo")
-                if not contrasena: errores.append("Falta Contraseña")
-                if not descripcion: errores.append("Falta Descripción")
-                if not telefono: errores.append("Falta Teléfono de contacto")
+        st.write("")
+        btn_registrar = st.button("💾 GENERAR TICKET", type="primary", use_container_width=True)
 
-                if errores:
-                    for e in errores: st.error(f"❌ {e}")
-                else:
+        # --- LÓGICA DE VALIDACIÓN (AQUÍ OCURRE LA MAGIA) ---
+        if btn_registrar:
+            valido = True
+            
+            # 1. Validar DNI
+            if len(dni_input) != 8:
+                err_dni.error("❌ El DNI es obligatorio y debe tener 8 dígitos.")
+                valido = False
+            
+            # 2. Validar Nombre
+            if not nombre:
+                err_nombre.error("❌ El Nombre es obligatorio.")
+                valido = False
+
+            # 3. Validar Teléfono
+            if not telefono:
+                err_telefono.error("❌ El Teléfono es obligatorio.")
+                valido = False
+
+            # 4. Validar Equipo
+            if not marca:
+                err_marca.error("❌ Falta la Marca.")
+                valido = False
+            if not modelo:
+                err_modelo.error("❌ Falta el Modelo.")
+                valido = False
+            if not contrasena:
+                err_contra.error("❌ Obligatorio. Si no tiene, escribe 'S/C'.")
+                valido = False
+            if not descripcion:
+                err_desc.error("❌ Debes describir el problema.")
+                valido = False
+
+            # SI TODO ESTÁ BIEN, GUARDAMOS
+            if valido:
+                try:
+                    # A. Guardar Cliente
                     try:
-                        # 1. GUARDAR/ACTUALIZAR CLIENTE
-                        datos_cli = {
+                        supabase.table("clientes").insert({
                             "dni": dni_input, "nombre": nombre.upper(), 
                             "telefono": telefono, "direccion": direccion
-                        }
-                        # Intentamos insertar (upsert sería ideal pero insert básico funciona si capturamos error duplicado)
-                        try:
-                            supabase.table("clientes").insert(datos_cli).execute()
-                        except:
-                            pass # Si ya existe, asumimos que está bien (o podríamos hacer update)
+                        }).execute()
+                    except: pass # Si ya existe, ignoramos
 
-                        # 2. CREAR TICKET
-                        datos_ticket = {
-                            "cliente_dni": dni_input,
-                            "cliente_nombre": nombre.upper(),
-                            "marca": marca.upper(),
-                            "modelo": modelo.upper(),
-                            "imei": imei,
-                            "contrasena": contrasena,
-                            "descripcion": descripcion,
-                            "precio": precio,
-                            "fecha_entrega": str(fecha_entrega),
-                            "estado": "Pendiente"
-                        }
-                        supabase.table("tickets").insert(datos_ticket).execute()
-                        
-                        st.success(f"✅ ¡Ingreso Registrado! Ticket creado para {nombre}")
-                        st.balloons()
-                        
-                        # Limpiar campos
-                        st.session_state.dni_cliente = ""
-                        st.session_state.nombre_cliente = ""
-                        
-                    except Exception as e:
-                        st.error(f"Error al guardar: {e}")
+                    # B. Guardar Ticket
+                    datos_ticket = {
+                        "cliente_dni": dni_input,
+                        "cliente_nombre": nombre.upper(),
+                        "marca": marca.upper(),
+                        "modelo": modelo.upper(),
+                        "imei": imei,
+                        "contrasena": contrasena,
+                        "descripcion": descripcion,
+                        "motivo": motivo,           # <--- NUEVO CAMPO
+                        "precio": precio,
+                        "fecha_recepcion": str(fecha_recepcion), # <--- NUEVO CAMPO
+                        "fecha_entrega": str(fecha_entrega),
+                        "estado": "Pendiente"
+                    }
+                    supabase.table("tickets").insert(datos_ticket).execute()
+                    
+                    st.success(f"✅ Ticket Creado Exitosamente para {nombre}")
+                    st.balloons()
+                    
+                    # Limpieza manual
+                    st.session_state.dni_cliente = ""
+                    st.session_state.nombre_cliente = ""
+                    # Nota: Para limpiar los campos de texto normales en Streamlit sin rerurn 
+                    # a veces se requiere un truco, pero aquí el usuario verá el éxito y podrá recargar.
+                    
+                except Exception as e:
+                    st.error(f"Error al guardar: {e}")
+            else:
+                st.toast("⚠️ Faltan datos obligatorios, revisa las casillas rojas.", icon="🚨")
 
-    # PESTAÑA HISTORIAL (Para ver los tickets creados)
     with t_historial:
         try:
-            # Consultamos tickets ordenados por fecha
             tickets = supabase.table("tickets").select("*").order("created_at", desc=True).execute().data
-            df_t = pd.DataFrame(tickets)
-            if not df_t.empty:
-                st.dataframe(
-                    df_t[["id", "cliente_nombre", "marca", "modelo", "estado", "fecha_entrega"]],
-                    use_container_width=True, hide_index=True
-                )
-            else: st.info("No hay tickets registrados.")
-        except: st.warning("Error cargando historial (¿Creaste la tabla 'tickets'?)")
+            if tickets:
+                df = pd.DataFrame(tickets)
+                st.dataframe(df[["id", "cliente_nombre", "marca", "motivo", "estado", "fecha_entrega"]], use_container_width=True, hide_index=True)
+            else: st.info("No hay tickets.")
+        except: pass
 
 elif selected == "Inventario":
-    # (El código del inventario que ya funcionaba bien, puedes pegarlo aquí si lo borraste o dejar el anterior)
-    st.info("Módulo de Inventario (Copia el código anterior aquí si lo necesitas)")
+    st.info("📦 Módulo de Inventario (Código previo)")
+    # (Pega aquí tu código de inventario si lo necesitas)
 
 elif selected == "Ventas":
     st.info("Próximamente...")
