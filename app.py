@@ -26,11 +26,8 @@ except Exception as e:
 # --- 3. ESTILOS CSS (MODO OFICINA) ---
 st.markdown("""
 <style>
-    /* Fondo y Textos */
     .stApp { background-color: #f4f6f9; }
     h1, h2, h3, h4, h5, p, div, span, label, li { color: #212529 !important; }
-    
-    /* Inputs Blancos y Limpios */
     .stTextInput>div>div>input { 
         background-color: #ffffff !important; 
         color: #212529 !important; 
@@ -41,22 +38,17 @@ st.markdown("""
         background-color: #ffffff !important;
         color: #212529 !important;
     }
-    
-    /* Tarjetas Dashboard */
     .dashboard-card {
         padding: 20px; border-radius: 12px; color: white !important;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 15px;
         transition: transform 0.2s;
     }
     .dashboard-card:hover { transform: translateY(-5px); }
-    
     .card-green { background-color: #28a745; background-image: linear-gradient(135deg, #28a745 0%, #20c997 100%); }
     .card-orange { background-color: #fd7e14; background-image: linear-gradient(135deg, #fd7e14 0%, #f39c12 100%); }
     .card-blue { background-color: #17a2b8; background-image: linear-gradient(135deg, #17a2b8 0%, #3498db 100%); }
     .card-yellow { background-color: #ffc107; background-image: linear-gradient(135deg, #ffc107 0%, #f1c40f 100%); }
     .card-yellow h3, .card-yellow p { color: #333 !important; } 
-
-    /* Botones */
     .stButton>button { border-radius: 6px; font-weight: 600; width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -147,7 +139,7 @@ if selected == "Dashboard":
                 st.plotly_chart(px.pie(df, names='categoria', values='stock', hole=0.5), use_container_width=True)
     except: st.info("Sin datos para gráficos.")
 
-# === PÁGINA: CLIENTES (CORREGIDA Y MEJORADA) ===
+# === PÁGINA: CLIENTES ===
 elif selected == "Clientes":
     st.markdown("### 👥 Gestión de Clientes")
     
@@ -156,22 +148,17 @@ elif selected == "Clientes":
     with t1:
         st.info("💡 Ingresa el DNI. Si ya existe, carga los datos. Si no, busca en RENIEC.")
         
-        # Inicializar variables de sesión
         if 'nombre_cliente' not in st.session_state: st.session_state.nombre_cliente = ""
         if 'dni_cliente' not in st.session_state: st.session_state.dni_cliente = ""
 
-        # Layout de búsqueda
         c_dni, c_btn, c_cls = st.columns([3, 1, 0.5])
         
-        # INPUT DNI SIN LIMITE DURO (Para poder editar fácil)
         dni_input = c_dni.text_input("DNI", value=st.session_state.dni_cliente, placeholder="Ingresa 8 dígitos")
         
-        # Detectar cambio manual para resetear nombre
         if dni_input != st.session_state.dni_cliente:
             st.session_state.nombre_cliente = ""
             st.session_state.dni_cliente = dni_input
 
-        # Botones
         buscar = c_btn.button("🔍 Buscar", use_container_width=True)
         limpiar = c_cls.button("🗑️", help("Limpiar"))
 
@@ -180,17 +167,14 @@ elif selected == "Clientes":
             st.session_state.nombre_cliente = ""
             st.rerun()
 
-        # LÓGICA DE BÚSQUEDA
         if (buscar or (dni_input and len(dni_input)==8)) and st.session_state.nombre_cliente == "":
             if len(dni_input) == 8:
-                # 1. Buscar en BD Local
                 res_db = supabase.table("clientes").select("*").eq("dni", dni_input).execute()
                 if res_db.data:
                     datos = res_db.data[0]
                     st.session_state.nombre_cliente = datos["nombre"]
                     st.toast(f"✅ Cliente frecuente: {datos['nombre']}", icon="🏠")
                 else:
-                    # 2. Buscar en API RENIEC
                     with st.spinner("Conectando con RENIEC..."):
                         nom_api = consultar_dni_reniec(dni_input)
                         if nom_api:
@@ -203,11 +187,8 @@ elif selected == "Clientes":
 
         st.markdown("---")
 
-        # FORMULARIO DE REGISTRO
         with st.form("form_cliente"):
-            # Nombre Obligatorio marcado con *
             nombre = st.text_input("Nombre Completo *", value=st.session_state.nombre_cliente)
-            
             c_tel, c_dir = st.columns(2)
             telefono = c_tel.text_input("Teléfono / Celular")
             direccion = c_dir.text_input("Dirección")
@@ -216,7 +197,6 @@ elif selected == "Clientes":
             guardar = st.form_submit_button("💾 Guardar Cliente", use_container_width=True)
             
             if guardar:
-                # VALIDACIONES ESTRICTAS
                 if not dni_input or len(dni_input) != 8:
                     st.error("❌ El DNI debe tener 8 dígitos exactos.")
                 elif not nombre.strip():
@@ -225,13 +205,12 @@ elif selected == "Clientes":
                     try:
                         supabase.table("clientes").insert({
                             "dni": dni_input, 
-                            "nombre": nombre.strip().upper(), # Guardar en MAYUSCULAS
+                            "nombre": nombre.strip().upper(), 
                             "telefono": telefono, 
                             "direccion": direccion, 
                             "email": email
                         }).execute()
                         st.success(f"✅ Cliente {nombre} registrado!")
-                        # Limpiar formulario
                         st.session_state.dni_cliente = ""
                         st.session_state.nombre_cliente = ""
                         st.rerun()
@@ -247,6 +226,7 @@ elif selected == "Clientes":
             if not df.empty:
                 st.dataframe(df[["dni", "nombre", "telefono"]], use_container_width=True, hide_index=True)
             else: st.info("No hay clientes.")
+        except: pass  # <--- ¡AQUÍ ESTABA EL ERROR! (Ya está arreglado)
 
 # === PÁGINA: INVENTARIO ===
 elif selected == "Inventario":
