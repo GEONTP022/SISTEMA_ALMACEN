@@ -29,86 +29,135 @@ except:
     st.error("⚠️ Configura los secrets de Supabase.")
     st.stop()
 
-# --- 3. ESTILOS CSS "PIXEL PERFECT" (IGUAL A TUS IMÁGENES) ---
+# --- 3. ESTILOS CSS "HIGH FIDELITY" (ESTILO FIGMA REAL) ---
 st.markdown("""
 <style>
-    /* FUENTE */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-    .stApp { background-color: #f2f4f8; font-family: 'Roboto', sans-serif; }
+    /* FUENTE: Inter (La estándar en UI moderna) */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] { background-color: #343a40; }
-    section[data-testid="stSidebar"] h1, h2, h3, span, p { color: white !important; }
+    .stApp { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
     
-    /* INPUTS */
+    /* SIDEBAR: Oscuro Profundo (Slate-900) */
+    section[data-testid="stSidebar"] { background-color: #0f172a; }
+    section[data-testid="stSidebar"] h1, h2, h3, p, span { color: #f1f5f9 !important; }
+    
+    /* INPUTS: Diseño Clean */
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea {
-        border: 1px solid #d1d5db; border-radius: 4px; color: #495057; background-color: white; height: 38px;
+        border: 1px solid #cbd5e1; 
+        border-radius: 6px; 
+        color: #334155; 
+        background-color: white; 
+        height: 40px;
+        font-size: 0.9rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    label { font-weight: 500; color: #495057; font-size: 0.85rem; }
+    .stTextInput>div>div>input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+    
+    label { font-weight: 600; color: #475569; font-size: 0.85rem; margin-bottom: 6px; }
 
-    /* BOTONES GLOBALES */
-    .stButton>button { border-radius: 4px; font-weight: 500; border: none; transition: 0.2s; height: 38px; }
+    /* BOTONES: Sistema de Diseño */
+    .stButton>button { 
+        border-radius: 6px; 
+        font-weight: 600; 
+        border: none; 
+        transition: all 0.2s; 
+        height: 40px; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
     
-    /* CLASES PARA BOTONES PERSONALIZADOS */
-    .btn-green button { background-color: #28a745 !important; color: white !important; }
-    .btn-green button:hover { background-color: #218838 !important; }
+    /* Verde (Acción Principal/Excel) */
+    .btn-green button { background-color: #10b981 !important; color: white !important; }
+    .btn-green button:hover { background-color: #059669 !important; transform: translateY(-1px); }
     
-    .btn-red button { background-color: #dc3545 !important; color: white !important; }
-    .btn-red button:hover { background-color: #c82333 !important; }
+    /* Rojo (Peligro/Cerrar) */
+    .btn-red button { background-color: #ef4444 !important; color: white !important; }
+    .btn-red button:hover { background-color: #dc2626 !important; }
     
-    .btn-blue button { background-color: #007bff !important; color: white !important; }
-
-    /* --- BARRA TITULO SECCION (GRIS OSCURO) --- */
-    .section-title {
-        background-color: #5a6268; color: white; padding: 10px 15px;
-        font-weight: 500; border-radius: 4px; margin-bottom: 15px;
-        text-transform: uppercase; font-size: 0.9rem;
+    /* Azul (Primario) */
+    .btn-blue button { background-color: #3b82f6 !important; color: white !important; }
+    
+    /* --- COMPONENTES UI PERSONALIZADOS --- */
+    
+    /* Barra de Título de Sección (Gris Oscuro Sólido) */
+    .ui-header {
+        background-color: #475569; 
+        color: white; 
+        padding: 12px 20px; 
+        border-radius: 6px; 
+        margin-bottom: 20px;
+        font-weight: 600; 
+        font-size: 0.9rem;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 
-    /* --- TABLA REPARACIÓN (IDÉNTICA A FIGMA) --- */
-    .rep-container {
-        border: 1px solid #ced4da; border-radius: 4px; overflow: hidden; background: white; margin-top: 10px;
+    /* Tabla de Datos (Estilo Dashboard) */
+    .ui-table-container {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        margin-top: 15px;
     }
     
-    .rep-header {
-        background-color: #6c757d; /* Gris Header */
-        color: white; padding: 12px 15px; font-weight: 700; font-size: 0.85rem;
-        display: flex; align-items: center;
+    .ui-table-header {
+        background-color: #f1f5f9;
+        color: #475569;
+        padding: 12px 16px;
+        font-weight: 700;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        border-bottom: 2px solid #e2e8f0;
+        display: flex;
+        align-items: center;
     }
     
-    .rep-row {
-        background-color: white; border-bottom: 1px solid #e9ecef;
-        padding: 15px; display: flex; align-items: flex-start;
-        font-size: 0.85rem; color: #212529; line-height: 1.6;
+    .ui-table-row {
+        background-color: white;
+        border-bottom: 1px solid #f1f5f9;
+        padding: 16px;
+        display: flex;
+        align-items: flex-start; /* Alineación superior para listas */
+        font-size: 0.9rem;
+        color: #334155;
+        transition: background 0.1s;
     }
-    .rep-row:hover { background-color: #f1f3f5; }
+    .ui-table-row:last-child { border-bottom: none; }
+    .ui-table-row:hover { background-color: #f8fafc; }
     
-    .rep-col { flex: 1; padding: 0 10px; }
+    .col-flex { flex: 1; padding: 0 12px; }
     
-    /* LISTAS DE DATOS (Bullets) */
-    ul.d-list { list-style: none; padding: 0; margin: 0; }
-    ul.d-list li { margin-bottom: 2px; display: flex; }
-    ul.d-list li::before { content: "•"; color: #6c757d; margin-right: 8px; font-weight: bold; }
-    
-    /* BOTÓN ENGRANAJE (VERDE CUADRADO) */
-    .gear-btn {
-        background-color: #28a745; color: white; width: 32px; height: 32px;
-        display: flex; align-items: center; justify-content: center;
-        border-radius: 4px; cursor: pointer; font-size: 1.1rem;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1); border: none;
+    /* Listas dentro de la tabla */
+    ul.ui-list { list-style: none; padding: 0; margin: 0; }
+    ul.ui-list li { margin-bottom: 4px; display: flex; align-items: center; }
+    ul.ui-list li::before { 
+        content: ""; 
+        width: 6px; height: 6px; 
+        background-color: #94a3b8; 
+        border-radius: 50%; 
+        margin-right: 8px; 
     }
     
-    /* BADGE AZUL "RECEPCIONADO" */
-    .badge-blue {
-        background-color: #007bff; color: white; padding: 4px 10px;
-        border-radius: 4px; font-weight: 700; font-size: 0.7rem; text-transform: uppercase;
+    /* Badges (Etiquetas) */
+    .ui-badge { 
+        padding: 4px 10px; 
+        border-radius: 99px; 
+        font-size: 0.7rem; 
+        font-weight: 700; 
+        text-transform: uppercase; 
         display: inline-block;
+        min-width: 90px;
+        text-align: center;
     }
-    .badge-green { background-color: #28a745; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; }
-    .badge-red { background-color: #dc3545; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; }
+    .badge-blue { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .badge-green { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-red { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
-    /* MODAL FOOTER */
-    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -125,7 +174,7 @@ def buscar_reniec(dni):
 def generar_pdf(t):
     width = 80 * mm; height = 297 * mm 
     buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=(width, height))
-    c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, height-10*mm, "VILLAFIX POS")
+    c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, height-10*mm, "VILLAFIX OS")
     c.setFont("Helvetica", 9); c.drawCentredString(width/2, height-15*mm, f"TICKET #{t['id']}")
     c.drawString(5*mm, height-25*mm, f"Cliente: {t['cliente_nombre']}")
     c.drawString(5*mm, height-30*mm, f"Equipo: {t['marca']} {t['modelo']}")
@@ -148,149 +197,151 @@ def subir_evidencia(archivo):
 
 # --- 5. MODALES ---
 
-# A) MODAL AGREGAR CLIENTE (DISEÑO FIGMA: 2 FILAS + FOOTER)
-@st.dialog("Agregar Cliente")
+@st.dialog("Nuevo Cliente")
 def modal_cliente():
-    # FILA 1: Tipo | DNI | Nombre
-    c1, c2, c3 = st.columns([1, 1.2, 2])
-    c1.selectbox("Tipo Documento", ["DNI", "RUC", "CE"])
+    st.markdown("##### 👤 Datos Personales")
+    c1, c2 = st.columns([1, 1.5])
+    c1.selectbox("Tipo Doc", ["DNI", "RUC"])
     
     col_dni, col_btn = c2.columns([3, 1])
-    dni = col_dni.text_input("Número Documento", label_visibility="collapsed", placeholder="DNI")
+    dni = col_dni.text_input("N° Documento", placeholder="Ingrese DNI", label_visibility="collapsed")
     if col_btn.button("🔍"):
         if n := buscar_reniec(dni): st.session_state.tn = n; st.rerun()
     
-    nom = c3.text_input("Razón Social / Nombre", value=st.session_state.get('tn', ''), placeholder="Nombre Completo")
-
-    # FILA 2: Dirección | Teléfono | Email
-    c4, c5, c6 = st.columns(3)
-    dire = c4.text_input("Dirección")
-    telf = c5.text_input("Teléfono")
-    email = c6.text_input("Correo Electrónico")
-
-    st.write("") # Separador
+    nom = st.text_input("Nombre Completo", value=st.session_state.get('tn', ''))
     
-    # FOOTER: Botones a la derecha
-    cf1, cf2, cf3 = st.columns([3, 1, 1])
-    with cf2:
+    st.markdown("##### 📍 Contacto")
+    c3, c4 = st.columns(2)
+    tel = c3.text_input("Teléfono"); mail = c4.text_input("Email")
+    dir = st.text_input("Dirección")
+    
+    st.markdown("---")
+    cf1, cf2 = st.columns([1, 3])
+    with cf1:
         st.markdown('<div class="btn-red">', unsafe_allow_html=True)
-        if st.button("Cerrar"): st.rerun()
+        if st.button("Cancelar"): st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-    with cf3:
+    with cf2:
         st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-        if st.button("Guardar", use_container_width=True):
-            if not dni or not nom: st.error("Faltan datos")
-            else:
-                supabase.table("clientes").upsert({"dni":dni, "nombre":nom, "telefono":telf, "direccion":dire, "email":email}).execute()
-                st.success("Guardado"); st.session_state.tn=""; st.rerun()
+        if st.button("Guardar Cliente", use_container_width=True):
+            supabase.table("clientes").upsert({"dni":dni, "nombre":nom, "telefono":tel, "email":mail, "direccion":dir}).execute()
+            st.success("Guardado"); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-# B) MODAL GESTIÓN
-@st.dialog("Gestión de Orden")
+@st.dialog("Detalle de Orden")
 def modal_gestion(t):
-    st.markdown(f"#### ⚙️ Orden #{t['id']}")
-    tab1, tab2, tab3 = st.tabs(["💰 Pagar", "📄 Ticket", "🚫 Anular"])
+    st.markdown(f"#### ⚙️ Orden #{t['id']} | {t['cliente_nombre']}")
     
-    with tab1:
+    tabs = st.tabs(["💰 Pagos", "📄 Comprobante", "🛠️ Acciones"])
+    
+    with tabs[0]:
         c1, c2 = st.columns(2)
         c1.metric("Total", f"S/ {t['precio']:.2f}")
-        c2.metric("Saldo", f"S/ {t['saldo']:.2f}", delta_color="inverse")
+        c2.metric("Pendiente", f"S/ {t['saldo']:.2f}", delta_color="inverse")
         
-        monto = st.number_input("Monto a Pagar", 0.0, float(t['saldo']), float(t['saldo']))
-        metodo = st.selectbox("Método", ["Efectivo", "Yape", "Plin"])
-        
-        st.write("")
-        st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-        if st.button("Realizar Pago", use_container_width=True):
-            n_acu = t['acuenta'] + monto; n_sal = t['precio'] - n_acu
-            est = "Entregado" if n_sal == 0 else "Pendiente"
-            supabase.table("tickets").update({"acuenta":n_acu, "saldo":n_sal, "estado":est, "metodo_pago":metodo}).eq("id", t['id']).execute()
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        if t['saldo'] > 0:
+            monto = st.number_input("Monto a cobrar", 0.0, float(t['saldo']), float(t['saldo']))
+            metodo = st.selectbox("Método de Pago", ["Efectivo", "Yape", "Plin"])
+            
+            st.markdown('<div class="btn-green">', unsafe_allow_html=True)
+            if st.button("Registrar Pago", use_container_width=True):
+                n_acu = t['acuenta'] + monto; n_sal = t['precio'] - n_acu
+                est = "Entregado" if n_sal == 0 else "Pendiente"
+                supabase.table("tickets").update({"acuenta":n_acu, "saldo":n_sal, "estado":est, "metodo_pago":metodo}).eq("id", t['id']).execute()
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.success("Esta orden está totalmente pagada.")
 
-    with tab2:
+    with tabs[1]:
         pdf = generar_pdf(t)
-        st.download_button("🖨️ Imprimir", pdf, f"Ticket_{t['id']}.pdf", "application/pdf", use_container_width=True)
-        
-    with tab3:
+        st.download_button("🖨️ Imprimir Ticket", pdf, f"Ticket_{t['id']}.pdf", "application/pdf", use_container_width=True)
+        if t['foto_antes']: st.image(t['foto_antes'], caption="Evidencia Entrada")
+
+    with tabs[2]:
         st.markdown('<div class="btn-red">', unsafe_allow_html=True)
-        if st.button("ANULAR REPARACIÓN", use_container_width=True):
+        if st.button("🚫 ANULAR ORDEN (Irreversible)", use_container_width=True):
             supabase.table("tickets").update({"estado":"Anulado", "saldo":0}).eq("id", t['id']).execute(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 6. MENU LATERAL ---
 with st.sidebar:
     if os.path.exists("Logo-Mockup.jpg"): st.image("Logo-Mockup.jpg", width=180)
-    else: st.markdown("### VillaFix POS")
+    else: st.markdown("## VillaFix OS")
     
     try: users = [u['nombre'] for u in supabase.table("usuarios").select("nombre").execute().data]
     except: users = ["Admin"]
     st.session_state.user = st.selectbox("Usuario", users)
     
     menu = option_menu(None, ["Dashboard", "Recepción", "Ventas", "Logística", "Clientes"], 
-        icons=["speedometer2", "tools", "cart4", "truck", "people"], default_index=1,
-        styles={"nav-link-selected": {"background-color": "#007bff"}})
+        icons=["grid", "phone", "cart", "truck", "people"], default_index=1,
+        styles={
+            "nav-link": {"font-family": "Inter", "font-size": "15px", "text-align": "left", "margin": "5px", "color": "white"},
+            "nav-link-selected": {"background-color": "#3b82f6"}
+        })
 
 # --- 7. MÓDULOS ---
 
-# === RECEPCIÓN (VISTA IGUAL A FIGMA) ===
+# === RECEPCIÓN (UI FINAMENTE DETALLADA) ===
 if menu == "Recepción":
     t1, t2 = st.tabs(["Reparación", "Listado Reparación"])
     
     # NUEVA REPARACIÓN
     with t1:
-        st.markdown('<div class="section-title">Información del Cliente</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ui-header">Información del Cliente</div>', unsafe_allow_html=True)
         
-        # Fila Cliente + Botones
+        # Selector inteligente + Botones
         c_sel, c_del, c_add = st.columns([6, 0.5, 0.5])
         with c_sel:
             try: clis = {f"{c['dni']} - {c['nombre']}": c for c in supabase.table("clientes").select("*").execute().data}
             except: clis = {}
-            sel = st.selectbox("Seleccione Cliente", ["Seleccionar..."] + list(clis.keys()), label_visibility="collapsed")
+            sel = st.selectbox("Buscar Cliente", ["Seleccionar..."] + list(clis.keys()), label_visibility="collapsed")
         
         with c_del:
             st.markdown('<div class="btn-red">', unsafe_allow_html=True)
-            st.button("🗑️", key="del")
+            st.button("✕", key="del", help="Limpiar selección")
             st.markdown('</div>', unsafe_allow_html=True)
         with c_add:
             st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-            if st.button("➕", key="add"): modal_cliente()
+            if st.button("＋", key="add", help="Nuevo Cliente"): modal_cliente()
             st.markdown('</div>', unsafe_allow_html=True)
 
         d_dni = clis[sel]['dni'] if sel != "Seleccionar..." else ""
         d_nom = clis[sel]['nombre'] if sel != "Seleccionar..." else ""
 
-        with st.container(border=True):
-            r1c1, r1c2, r1c3 = st.columns([3, 2, 2])
-            r1c1.text_input("Nombre completos", value=d_nom, disabled=True)
-            r1c2.text_input("Documento", value=d_dni, disabled=True)
-            r1c3.text_input("Celular")
-            r2c1, r2c2 = st.columns(2); r2c1.text_input("Dirección"); r2c2.text_input("Email")
+        with st.container():
+            c1, c2, c3 = st.columns([3, 2, 2])
+            c1.text_input("Nombre", value=d_nom, disabled=True)
+            c2.text_input("DNI", value=d_dni, disabled=True)
+            c3.text_input("Celular")
+            
+            c4, c5 = st.columns(2)
+            c4.text_input("Dirección"); c5.text_input("Email")
 
-        st.markdown('<div class="section-title">Información de la Recepción</div>', unsafe_allow_html=True)
-        with st.container(border=True):
+        st.markdown('<div class="ui-header">Datos del Equipo</div>', unsafe_allow_html=True)
+        with st.container():
             e1, e2, e3 = st.columns(3)
-            mar = e1.selectbox("Marca", ["Samsung", "Apple", "Xiaomi", "Motorola", "Honor"])
-            mod = e2.text_input("Modelo", placeholder="Ej: Redmi Note 10")
-            ime = e3.text_input("N° IMEI")
+            mar = e1.selectbox("Marca", ["Samsung", "Apple", "Xiaomi", "Motorola", "Honor", "Otro"])
+            mod = e2.text_input("Modelo")
+            ime = e3.text_input("IMEI / Serie")
             
             e4, e5, e6 = st.columns(3)
-            mot = e4.selectbox("Motivo", ["Reparación", "Garantía", "Mantenimiento"])
-            fr = e5.date_input("Fecha Recepción", date.today())
-            fe = e6.date_input("Fecha Posible Entrega", date.today())
+            mot = e4.selectbox("Motivo", ["Reparación", "Garantía", "Mantenimiento", "Software"])
+            fr = e5.date_input("Recepción", date.today())
+            fe = e6.date_input("Entrega Aprox", date.today())
             
             e7, e8, e9 = st.columns(3)
-            cost = e7.number_input("Costo Reparación", 0.0)
-            cla = e8.text_input("Contraseña / PIN")
+            cost = e7.number_input("Costo (S/)", 0.0)
+            cla = e8.text_input("Patrón / Clave")
             tec = e9.selectbox("Técnico", ["Admin", "Técnico 1"])
             
-            obs = st.text_area("Detalle / Fallas / Observaciones")
-            foto = st.file_uploader("Evidencia", type=['png','jpg'])
+            obs = st.text_area("Diagnóstico / Falla")
+            foto = st.file_uploader("Subir Evidencia (Foto)", type=['jpg','png'])
 
         st.write("")
         st.markdown('<div class="btn-blue">', unsafe_allow_html=True)
-        if st.button("GENERAR TICKET SERVICIO", use_container_width=True):
-            if not d_dni: st.error("Falta Cliente")
+        if st.button("GENERAR ORDEN DE SERVICIO", use_container_width=True):
+            if not d_dni: st.error("⚠️ Debe seleccionar un cliente primero.")
             else:
                 url = subir_evidencia(foto)
                 supabase.table("tickets").insert({
@@ -299,99 +350,95 @@ if menu == "Recepción":
                     "precio":cost, "acuenta":0, "saldo":cost, "fecha_entrega":str(fe), "estado":"Pendiente",
                     "foto_antes":url
                 }).execute()
-                st.success("Ticket Generado"); st.rerun()
+                st.success("✅ Orden registrada correctamente"); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # LISTADO (REPLICA VISUAL)
+    # LISTADO (DISEÑO FIGMA TABLE)
     with t2:
-        st.markdown('<div class="section-title">CRITERIOS DE BÚSQUEDA</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ui-header">Criterios de Búsqueda</div>', unsafe_allow_html=True)
         
         c_exp, c_sch = st.columns([1, 3])
         with c_exp:
             st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-            if st.button("Exportar a Excel 📗", use_container_width=True):
-                pass # Lógica exportar
+            if st.button("Excel 📗", use_container_width=True): pass
             st.markdown('</div>', unsafe_allow_html=True)
         with c_sch:
-            search = st.text_input("Buscar:", placeholder="", label_visibility="collapsed")
+            search = st.text_input("Buscar:", placeholder="Buscar por Cliente o DNI...", label_visibility="collapsed")
 
-        # TABLA HEADER
+        # TABLA HTML/CSS
         st.markdown("""
-        <div class="rep-container">
-            <div class="rep-header">
+        <div class="ui-table-container">
+            <div class="ui-table-header">
                 <div style="width:60px; text-align:center;">⚙️</div>
-                <div style="width:120px;">Estado</div>
-                <div class="rep-col">Cliente</div>
-                <div class="rep-col">Información</div>
-                <div class="rep-col">Repuestos</div>
-                <div class="rep-col">Montos</div>
-                <div class="rep-col">Fechas</div>
+                <div style="width:110px; text-align:center;">Estado</div>
+                <div class="col-flex" style="flex:1.5;">Cliente</div>
+                <div class="col-flex" style="flex:1.5;">Equipo</div>
+                <div class="col-flex">Repuestos</div>
+                <div class="col-flex" style="text-align:right;">Montos</div>
+                <div class="col-flex" style="text-align:right;">Fechas</div>
             </div>
         """, unsafe_allow_html=True)
 
-        # TABLA DATA
         q = supabase.table("tickets").select("*").order("created_at", desc=True)
         if search: q = q.ilike("cliente_nombre", f"%{search}%")
         data = q.execute().data
 
         if data:
             for t in data:
-                if t['estado']=='Anulado': bg="badge-red"; stt="ANULADO"
-                elif t['saldo']<=0: bg="badge-green"; stt="ENTREGADO"
-                else: bg="badge-blue"; stt="RECEPCIONADO"
+                # Estilos Badge
+                if t['estado']=='Anulado': bg="badge-red"; txt="ANULADO"
+                elif t['saldo']<=0: bg="badge-green"; txt="ENTREGADO"
+                else: bg="badge-blue"; txt="RECEPCIONADO"
                 
-                f_rec = datetime.fromisoformat(t['created_at']).strftime("%Y-%m-%d")
-                nom_cli = t['cliente_nombre'] if t['cliente_nombre'] else "Sin Nombre"
+                f_rec = datetime.fromisoformat(t['created_at']).strftime("%d/%m/%Y")
+                nom = t['cliente_nombre'].split()[0] if t['cliente_nombre'] else "General"
                 
-                # Render Fila
+                # Botón de Acción
                 c_btn, c_info = st.columns([0.8, 11])
                 with c_btn:
                     st.write("")
                     st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-                    if st.button("⚙️", key=f"g_{t['id']}"): modal_gestion(t)
+                    if st.button("⚙️", key=f"act_{t['id']}"): modal_gestion(t)
                     st.markdown('</div>', unsafe_allow_html=True)
                 
                 with c_info:
                     st.markdown(f"""
-                    <div class="rep-row">
-                        <div style="width:120px;"><span class="{bg} badge">{stt}</span></div>
-                        <div class="rep-col">
-                            <ul class="d-list">
-                                <li>TR-{t['id']}</li>
-                                <li><strong>{nom_cli.split()[0]}</strong></li>
-                                <li>DNI: {t['cliente_dni']}</li>
+                    <div class="ui-table-row">
+                        <div style="width:110px; text-align:center;"><span class="ui-badge {bg}">{txt}</span></div>
+                        <div class="col-flex" style="flex:1.5;">
+                            <ul class="ui-list">
+                                <li><strong>{nom}</strong></li>
+                                <li>{t['cliente_dni']}</li>
                             </ul>
                         </div>
-                        <div class="rep-col">
-                            <ul class="d-list">
-                                <li>{t['motivo']}</li>
+                        <div class="col-flex" style="flex:1.5;">
+                            <ul class="ui-list">
                                 <li>{t['marca']} - {t['modelo']}</li>
-                                <li>Téc: {t['vendedor_nombre']}</li>
+                                <li>{t['motivo']}</li>
                             </ul>
                         </div>
-                        <div class="rep-col" style="color:#6c757d;">Sin repuestos</div>
-                        <div class="rep-col">
-                            <ul class="d-list">
+                        <div class="col-flex" style="color:#64748b;">N/A</div>
+                        <div class="col-flex" style="text-align:right;">
+                            <ul class="ui-list" style="justify-content: flex-end; display:block;">
                                 <li>Pagado: {t['acuenta']:.2f}</li>
-                                <li>Restante: {t['saldo']:.2f}</li>
-                                <li><strong>Total: {t['precio']:.2f}</strong></li>
+                                <li><strong>Saldo: {t['saldo']:.2f}</strong></li>
                             </ul>
                         </div>
-                        <div class="rep-col">
-                            <ul class="d-list">
-                                <li>Recepción: {f_rec}</li>
-                                <li>Entrega: {t['fecha_entrega']}</li>
+                        <div class="col-flex" style="text-align:right;">
+                            <ul class="ui-list" style="justify-content: flex-end; display:block;">
+                                <li>In: {f_rec}</li>
+                                <li>Out: {t['fecha_entrega']}</li>
                             </ul>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
             
-            st.markdown("</div>", unsafe_allow_html=True) # Cierre container
+            st.markdown("</div>", unsafe_allow_html=True) # Fin Container
         else:
-            st.info("No hay registros que coincidan.")
+            st.info("No se encontraron registros.")
 
-# (Otros módulos simplificados)
-elif menu == "Dashboard": st.title("Panel de Control")
-elif menu == "Ventas": st.title("Punto de Venta")
+# === OTROS MÓDULOS (SIMPLIFICADOS) ===
+elif menu == "Dashboard": st.title("Dashboard")
+elif menu == "Ventas": st.title("Ventas")
 elif menu == "Logística": st.title("Logística")
 elif menu == "Clientes": st.title("Clientes")
