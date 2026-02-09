@@ -36,17 +36,20 @@ st.markdown("""
     .stApp { background-color: #f8f9fa; }
     h1, h2, h3, h4 { color: #1e293b !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
     
+    /* Inputs Estilizados */
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
         background-color: white !important; color: #1e293b !important; 
         border-radius: 8px; border: 1px solid #cbd5e1;
     }
     
+    /* Tarjetas */
     .metric-card {
         background: white; padding: 20px; border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #2563EB;
         text-align: center;
     }
     
+    /* Live Feed (Tickets) */
     .ticket-item { 
         background: white; padding: 15px; border-radius: 10px; 
         border: 1px solid #e2e8f0; margin-bottom: 10px; 
@@ -59,6 +62,7 @@ st.markdown("""
         border-radius: 12px; font-size: 0.75em; font-weight: bold; 
     }
     
+    /* Botones */
     .stButton>button { border-radius: 8px; font-weight: 600; text-transform: uppercase; }
 </style>
 """, unsafe_allow_html=True)
@@ -286,7 +290,7 @@ elif selected == "Recepción":
                     st.session_state.recepcion_step = 2
                     st.rerun()
 
-        # === PASO 2: CAJA (OPCIONAL) ===
+        # === PASO 2: CAJA (CORREGIDO: DOBLE BOTÓN) ===
         elif st.session_state.recepcion_step == 2:
             data = st.session_state.temp_data
             st.markdown(f"### 💰 Caja: {data['nombre']}")
@@ -338,16 +342,20 @@ elif selected == "Recepción":
                             st.rerun()
                     except Exception as e: st.error(f"Error: {e}")
 
-                # DOS BOTONES DE ACCIÓN
-                col_pay, col_skip = st.columns([1.5, 1])
+                st.write("") 
                 
-                with col_pay:
-                    if st.button("💾 CONFIRMAR ADELANTO", type="primary", use_container_width=True):
+                # --- BOTONES LADO A LADO ---
+                col_pagar, col_omitir = st.columns(2)
+                
+                with col_pagar:
+                    # Botón Azul
+                    if st.button("💾 CONFIRMAR PAGO", type="primary", use_container_width=True):
                         guardar_ticket(acuenta, metodo)
-                        
-                with col_skip:
-                    if st.button("⏩ OMITIR PAGO (Pagar al Recoger)", use_container_width=True):
-                        guardar_ticket(0.00, "Contra-entrega") # Fuerza 0 adelanto
+                
+                with col_omitir:
+                    # Botón Blanco (Omitir)
+                    if st.button("⏩ OMITIR (Pagar al Recoger)", use_container_width=True):
+                        guardar_ticket(0.00, "Contra-entrega")
 
             if st.button("⬅️ Editar datos"):
                 st.session_state.recepcion_step = 1
